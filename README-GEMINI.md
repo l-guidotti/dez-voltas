@@ -59,3 +59,7 @@ A configuração padrão agora usa `gemini-3.5-flash-lite`. Um sucesso no diagn�
 ## Calendário explícito na geração
 
 O servidor calcula cada semana a partir de startDate, incluindo semanas parciais, e fornece ao Gemini as datas disponíveis. O JSON Schema usa prefixItems por semana, com início fixado, enumeração das datas e limites de sessões/distância/RPE. A validação permanece ativa e agora distingue início incorreto de excesso de sessões. Não há remanejamento de datas, descarte de sessões nem nova chamada automática. Testes cobrem todos os dias de início, períodos de 14/15/20/28/29 dias e virada do ano; ainda é necessário validar com Gemini real após publicar.
+
+## Cobertura das fases até o objetivo
+
+O servidor também calcula intervalos contíguos das fases, do início até a data-alvo inclusive (no máximo 12 fases). O Gemini retorna apenas título e orientações de cada fase na ordem fornecida; o servidor atribui as datas de origem. O número de fases é exigido no esquema e conferido na resposta; não são inventadas orientações para fases ausentes. A validação completa da proposta continua ativa. Testes cobrem todos os prazos de 14 a 730 dias, incluindo ano bissexto, lacunas, fases ausentes e preservação dos dados recebidos. O calendário de sessões mantém o dia-alvo livre de corridas de preparação.
