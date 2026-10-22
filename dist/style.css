@@ -17,3 +17,7 @@
 .profile-generation-feedback[hidden]{display:none}.profile-generation-feedback{margin-top:18px;scroll-margin:24px}#profile-result{scroll-margin:24px}
 
 .profile-check{display:block;margin-top:14px}
+
+.generated-summary{margin-bottom:24px}.generated-summary h2{font-family:Georgia,serif;font-size:30px;font-weight:400}.generated-summary p,.generated-instructions p{line-height:1.7;white-space:pre-line}.generated-run{gap:14px;align-items:center;min-height:78px}.generated-run>span{min-width:0;flex:1}.generated-run>span>span{min-width:0;display:grid;gap:4px}.generated-run small{font-size:11px;color:var(--muted);font-weight:400}.generated-run>span strong{white-space:normal;overflow-wrap:anywhere;font-size:13px}.generated-run>strong{flex-shrink:0;font-size:13px}.generated-summary li{line-height:1.7;margin:8px 0}
+
+.google-login{margin:10px 0 18px}.profile-email summary{cursor:pointer;font-size:13px;padding:12px 0}.profile-email .profile-login{margin-top:14px}

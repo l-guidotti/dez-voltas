@@ -36,9 +36,9 @@ Não é necessário converter o projeto Pages para integração Git nem trocar o
 ## Dados e limites atuais
 
 - Os registros e sugestões salvos ficam no aparelho, não neste repositório. Não há sincronização de treinos entre dispositivos.
-- Supabase Auth fornece acesso por link de e-mail; configure URLs de retorno e SMTP para destinatários fora da equipe do projeto.
+- Supabase Auth fornece acesso por Google (após habilitar o provedor) e link de e-mail como alternativa. Configure o OAuth conforme [LOGIN-GOOGLE.md](LOGIN-GOOGLE.md); para e-mails fora da equipe do projeto, configure SMTP.
 - O Gemini recebe somente os dados de treino autorizados no formulário. O e-mail da conta não é enviado ao modelo.
-- A sugestão detalha até 28 dias e apresenta as fases até o objetivo. Ela permanece separada do calendário original até uma futura integração.
+- A sugestão detalha até 28 dias e apresenta as fases até o objetivo. O botão Usar este plano atualiza Plano, Hoje, sessões para registro e exportação de agenda. Novas sugestões não trocam automaticamente o plano em uso. O histórico anterior permanece disponível; o backup JSON inclui os planos adotados e seus registros.
 - O controle de uso tem limite de 5 tentativas de geração por dia/usuário. Falhas também contam. KV tem consistência eventual; não constitui teto financeiro exato.
 - A disponibilidade do modelo e as cotas da conta Google precisam de validação real. Consultar metadados não comprova que a geração está habilitada.
 
