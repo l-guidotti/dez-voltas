@@ -1,0 +1,16 @@
+{
+  "name": "dez-voltas",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-10-22",
+  "vars": {
+    "SUPABASE_URL": "https://wuuyaisxmljtuhkilrjm.supabase.co",
+    "APP_ORIGIN": "https://dez-voltas.pages.dev",
+    "GEMINI_MODEL": "gemini-3.5-flash-lite"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "AI_USAGE",
+      "id": "b0cc4098f3c24241b5a4cb99daea1bee"
+    }
+  ]
+}

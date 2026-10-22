@@ -1,0 +1,7 @@
+{
+  "name": "dez-voltas",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node checks/gemini.mjs && node checks/profile-ui.mjs && node checks/regression.mjs"},
+  "engines": {"node": ">=18"}
+}
