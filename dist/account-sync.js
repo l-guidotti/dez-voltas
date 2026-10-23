@@ -1,3 +1,4 @@
+import {sessionFetch} from './session-client.js';
 import {validateAccountDocument} from './sync-contract.js';
 import {documentRows,rowsDocument,rowChanges,overlayRows,rowKey,same} from './relational-contract.js';
 let adapter,owner=null,epoch=0,cursor=0,base=new Map(),conflicts=new Set(),legacy=null,busy=false,timer,message='Entre na conta para sincronizar.',applying=false;
@@ -8,7 +9,7 @@ export function syncMessage(){return message;}
 export function hasSyncConflict(){return conflicts.size>0;}
 function report(text){message=text;window.dispatchEvent(new Event('sync-status'));}
 function cache(){if(owner)localStorage.setItem(key(owner),JSON.stringify({cursor,rows:[...base.values()],conflicts:[...conflicts],legacy,document:adapter.capture(owner)}));}
-async function request(body){const r=await fetch('/api/account/sync'+(body?'':'?since='+cursor),{method:body?'POST':'GET',credentials:'same-origin',headers:body?{'content-type':'application/json'}:{},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});const data=await r.json();if(!r.ok){const e=new Error(data.error||'Falha de sincronização.');e.status=r.status;throw e;}return data;}
+async function request(body){const r=await sessionFetch('/api/account/sync'+(body?'':'?since='+cursor),{method:body?'POST':'GET',credentials:'same-origin',headers:{'x-account-id':owner,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});const data=await r.json();if(!r.ok){const e=new Error(data.error||'Falha de sincronização.');e.status=r.status;throw e;}return data;}
 function apply(document){applying=true;try{adapter.apply(validateAccountDocument(document,owner),owner);}finally{applying=false;}}
 function receive(remote){
  const local=clone(adapter.capture(owner));let pending=rowChanges(base,local,owner);const next=overlayRows(base,remote.rows);

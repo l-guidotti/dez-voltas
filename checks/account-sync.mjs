@@ -18,7 +18,7 @@ function store(owner,doc=empty(owner),legacyRevision=0){const state={cursor:1,le
 function response(owner,since){const s=stores.get(owner)||store(owner);return {initialized:true,cursor:s.cursor,legacy_revision:s.legacy_revision,rows:copy([...s.rows.values()].filter(r=>r.sync_version>since).map(({sync_version,...r})=>r))};}
 function device(storage=new Map(),owner=A){
  let doc=empty(owner),selected=owner;
- const context=vm.createContext({...relational,Map,Set,validateAccountDocument,JSON,Event,AbortSignal,console,setTimeout:()=>1,clearTimeout(){},setInterval(){},localStorage:{getItem:k=>storage.get(k),removeItem:k=>storage.delete(k),setItem:(k,v)=>storage.set(k,v)},window:{addEventListener(){},dispatchEvent(){}},fetch:async(path,options)=>{
+ const context=vm.createContext({sessionFetch:(...args)=>context.fetch(...args),...relational,Map,Set,validateAccountDocument,JSON,Event,AbortSignal,console,setTimeout:()=>1,clearTimeout(){},setInterval(){},localStorage:{getItem:k=>storage.get(k),removeItem:k=>storage.delete(k),setItem:(k,v)=>storage.set(k,v)},window:{addEventListener(){},dispatchEvent(){}},fetch:async(path,options)=>{
   if(offline)throw Error('offline');assert.ok(path.startsWith('/api/account/sync'));const s=stores.get(selected)||store(selected);
   if(options.method==='POST'){
    const body=JSON.parse(options.body);posted.push(body);for(const r of body.changes)if((s.rows.get(rowKey(r))?.revision||0)!==r.revision)return Response.json({error:'conflict'},{status:409});

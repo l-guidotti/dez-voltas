@@ -27,9 +27,9 @@ Perfil, preferências e cada plano também possuem revisão própria; alteraçõ
 
 `database/account-data.sql` registra o modelo inicial. `database/relational-training.sql` cria o modelo separado. `database/freeze-legacy.sql` impede novas escritas no documento antigo. Os dados existentes foram convertidos e a reconstrução foi comparada com os originais. `account_data` permanece como cópia de recuperação, sem acompanhar novas alterações. Novas contas são inicializadas automaticamente; inicialização é idempotente, compara a revisão do documento antigo e nunca substitui um armazenamento já migrado.
 
-O endpoint antigo `/api/account/data` retorna HTTP 426, pedindo atualização, para não permitir divergência de dados. A PWA usa cache v12. Caches v1 limpos carregam os dados migrados. Edições offline pendentes no formato antigo são preservadas; se não houver uma base confiável para compará-las, a interface pede escolha antes de sobrescrever registros existentes. Não apague os dados do navegador para atualizar.
+O endpoint antigo `/api/account/data` retorna HTTP 426, pedindo atualização, para não permitir divergência de dados. A PWA usa cache v13. Caches v1 limpos carregam os dados migrados. Edições offline pendentes no formato antigo são preservadas; se não houver uma base confiável para compará-las, a interface pede escolha antes de sobrescrever registros existentes. Não apague os dados do navegador para atualizar.
 
-A sessão ainda expira em até uma hora: entre novamente para continuar enviando dados. Renovação automática não faz parte desta mudança. Backups JSON e CSV continuam funcionando. O cache local não possui criptografia própria; alterações offline ainda não enviadas dependem do armazenamento do dispositivo.
+O token de acesso continua curto (até uma hora), com renovação automática usando um refresh token em cookie HttpOnly, Secure e SameSite=Lax. O cookie de renovação dura até 30 dias e é atualizado a cada renovação, respeitando revogações e políticas do Supabase. Sessões iniciadas antes desta versão precisam de uma saída e nova entrada para receber o cookie de renovação. Backups JSON e CSV continuam funcionando. O cache local não possui criptografia própria; alterações offline ainda não enviadas dependem do armazenamento do dispositivo.
 
 ## Validação
 

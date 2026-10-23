@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node checks/gemini.mjs && node checks/profile-ui.mjs && node checks/regression.mjs && node checks/active-plan.mjs && node checks/account-sync.mjs"
+    "test": "node checks/gemini.mjs && node checks/profile-ui.mjs && node checks/regression.mjs && node checks/active-plan.mjs && node checks/account-sync.mjs && node checks/session.mjs"
   },
   "engines": {
     "node": ">=18"
