@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import {validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate} from '../dist/training-contract.js';
 const events={},windowEvents={},storage=new Map();
-const context=vm.createContext({intensityPolicy,renderWorkout,workoutTypes,crypto:webcrypto,sessionFetch:(...args)=>context.fetch(...args),configureAccountSync(){},activeSyncOwner:()=>'new-runner',connectAccount:async()=>{},accountChanged(){},syncMessage:()=>'Sincronizado',hasSyncConflict:()=>false,synchronize:async()=>{},resolveSync:async()=>{},replaceOwnerArchive(){},adoptSuggestion:(owner,result)=>{context.adopted={owner,result}},setPlanOwner(){},getActivePlan:()=>null,validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate,Intl,Date,URL,URLSearchParams,Blob,setTimeout,clearTimeout,AbortController,Event,requestAnimationFrame:fn=>fn(),document:{addEventListener:(type,callback)=>events[type]=callback,querySelector:()=>null},window:{addEventListener:(name,fn)=>windowEvents[name]=fn,dispatchEvent(){}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},fetch:async()=>{throw Error('offline')},location:{href:'https://example.com/#perfil'},history:{replaceState(){}}});
+const context=vm.createContext({intensityPolicy,renderWorkout,workoutTypes,crypto:webcrypto,sessionFetch:(...args)=>context.fetch(...args),configureAccountSync(){},activeSyncOwner:()=>'new-runner',connectAccount:async()=>{},accountChanged(){},syncMessage:()=>'Sincronizado',hasSyncConflict:()=>false,synchronize:async()=>{},resolveSync:async()=>{},replaceOwnerArchive(){},adoptSuggestion:(owner,result)=>{context.adopted={owner,result}},setPlanOwner(){},getActivePlan:()=>null,validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate,Intl,Date,URL,URLSearchParams,Blob,setTimeout,clearTimeout,AbortController,Event,requestAnimationFrame:fn=>fn(),document:{addEventListener:(type,callback)=>events[type]=callback,querySelector:()=>null},window:{addEventListener:(name,fn)=>windowEvents[name]=fn,dispatchEvent(){}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},fetch:async()=>{throw Error('offline')},location:{href:'https://example.com/#perfil'},history:{replaceState(){}}});
 vm.runInContext(fs.readFileSync('dist/profile.js','utf8').replace(/^import .*;\n/gm,'').replace(/export /g,''),context);
 let html=context.renderProfile();assert.ok(html.includes('Receber link de acesso'));assert.ok(!html.includes('id="profile-goal"'));assert.ok(html.includes('primeiro acesso'));
 vm.runInContext(`account={id:'uid-a',email:'<script>@example.com'}; authChecked=true;`,context);
@@ -91,3 +91,39 @@ const late=context.refreshJobs();vm.runInContext('account=null;result=null;reset
 release(Response.json({job:{id:reopenedId,status:'completed',result:{profile:p,plan}},history:[]}));await late;
 assert.ok(!context.renderProfile().includes('Base gradual'));assert.equal(vm.runInContext('generationOwner',context),null);
 console.log('PASS: resultado recuperado após reabertura sem nova geração/adoção, consulta leve e resposta atrasada isolada após logout.');
+
+// Reproduce the mobile reset: an incomplete form must survive a cloud reload,
+// page restart and account switch without becoming a valid cloud profile.
+vm.runInContext("account={id:'partial-a',email:'a@example.com'};draft=null;editingOwner=null;load();",context);
+Object.assign(fields,{goal:'distance',target:21.1,weeklyKm:'',longestKm:'',weeksConsistent:'',eventName:'Minha meia',days:[],consent:null});
+const input=name=>({target:{name,closest:selector=>selector==='#profile-goal'?form:null}});
+let cloudChanges=0;context.accountChanged=()=>{cloudChanges++};
+events.input(input('eventName'));
+assert.equal(cloudChanges,0);assert.ok(!storage.has('dez-voltas-draft-v1:partial-a'));
+assert.equal(JSON.parse(storage.get('dez-voltas-profile-edit-v1:partial-a')).profile.details.eventName,'Minha meia');
+let background=false;context.window.dispatchEvent=event=>{if(event.type==='profile-change')background=event.background};
+windowEvents['account-data-loaded']();assert.equal(background,true);
+assert.ok(context.renderProfile().includes('value="Minha meia"'));assert.ok(context.renderProfile().includes('value="21.1"'));assert.equal(context.profileEditing(),true);
+// Discard all in-memory editor state, as on a fresh load.
+vm.runInContext('draft=null;editingOwner=null;load();',context);
+assert.ok(context.renderProfile().includes('value="Minha meia"'));assert.equal(context.needsRegistration(),true);
+// Days and objective changes also persist while required fields are missing.
+fields.days=[0,2,4];events.change(input('days'));
+assert.deepEqual(JSON.parse(storage.get('dez-voltas-profile-edit-v1:partial-a')).profile.days,[0,2,4]);
+fields.goal='backyard';events.change(input('goal'));
+let partial=JSON.parse(storage.get('dez-voltas-profile-edit-v1:partial-a')).profile;
+assert.equal(partial.goal,'backyard');assert.equal(partial.target,'');assert.equal(partial.details.eventName,'Minha meia');
+vm.runInContext("account={id:'partial-b',email:'b@example.com'};load();",context);
+assert.ok(!context.renderProfile().includes('value="Minha meia"'));assert.equal(context.profileEditing(),false);
+vm.runInContext("account={id:'partial-a',email:'a@example.com'};load();",context);
+assert.ok(context.renderProfile().includes('value="Minha meia"'));assert.equal(context.profileEditing(),true);
+Object.assign(fields,{goal:'distance',target:21.1,weeklyKm:25,longestKm:10,weeksConsistent:8});
+await events.click({target:{closest(){return {dataset:{profile:'save-profile'}}}}});
+assert.equal(context.needsRegistration(),false);assert.equal(context.profileEditing(),false);
+assert.ok(!storage.has('dez-voltas-profile-edit-v1:partial-a'));
+vm.runInContext('draft=null;editingOwner=null;load();',context);assert.equal(context.needsRegistration(),false);
+assert.ok(context.renderProfile().includes('value="Minha meia"'));
+// Bad local edit data must not prevent loading a previously completed profile.
+storage.set('dez-voltas-profile-edit-v1:partial-a',JSON.stringify({version:1,profile:{days:'invalid'}}));
+vm.runInContext('load();',context);assert.equal(context.needsRegistration(),false);
+console.log('PASS: cadastro incompleto preservado durante sincronização, recarga e mudança de objetivo/dias; isolamento por conta, conclusão e rascunho inválido.');

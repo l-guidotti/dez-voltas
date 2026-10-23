@@ -15,3 +15,13 @@ A saída usa o mesmo bloqueio da renovação, cancela o agendamento, revoga a se
 `npm test` cobre cookies/rotação, metadados sem tokens, origem, erro temporário, revogação, sessão sem acesso mas com refresh, saída, chamadas simultâneas, coordenação de abas, renovação agendada, offline, repetição limitada e saída concorrente com renovação. Os provedores são simulados; a manutenção real de uma sessão ao longo de uma hora e o comportamento Safari/PWA devem ser conferidos no dispositivo após uma nova entrada.
 
 Referências: https://supabase.com/docs/guides/auth/sessions e https://supabase.com/docs/guides/troubleshooting/should-i-set-a-shorter-max-age-parameter-on-the-cookies-8sbF4V
+
+## Preenchimento do cadastro no celular
+
+A sincronização chama `account-data-loaded` a cada atualização, inclusive ao focar a janela e na verificação periódica. Antes, `load()` descartava o formulário em memória e restaurava apenas perfis completos e validados; respostas de um cadastro parcial desapareciam.
+
+O formulário agora preserva uma edição local por conta em `dez-voltas-profile-edit-v1:<id>`, inclusive antes de preencher os campos obrigatórios. Essa edição parcial não entra no documento sincronizado. Perfis completos continuam usando a sincronização existente. A edição local prevalece durante o preenchimento e na reabertura, e é removida ao concluir/salvar o perfil ou enviar um perfil validado para geração. Sair mantém a cópia para a mesma conta; outra conta não a recebe. Se o armazenamento falhar, o app avisa e conserva a edição em memória.
+
+Atualizações de nuvem e da fila não substituem o formulário de uma conta durante sua edição. Mudanças explícitas de objetivo/dias e ações do usuário mantêm os valores restantes e restauram o foco. Trocar o tipo de objetivo limpa apenas a meta numérica, que passa a ter outra unidade.
+
+`npm test` inclui a regressão de sincronização, recarga, objetivo/dias, conclusão, isolamento e dados locais inválidos. `node checks/profile-draft-browser.mjs` executa o app real em Chromium com tela móvel de 390×844 e APIs locais simuladas: sincronização sem substituir o campo/cursor/rolagem, foco/visibilidade/conexão, recarga, navegação, conclusão, saída e reentrada em outra conta. Requer Chromium (`CHROME_BIN` opcional), Node 22+ e permissão de rede local. Não usa contas reais nem chama Gemini. O teste em Chromium não substitui a conferência em Safari/PWA no iPhone. Cache atualizado para v20.
