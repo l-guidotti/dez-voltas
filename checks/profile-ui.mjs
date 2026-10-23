@@ -59,3 +59,9 @@ assert.equal(generationRequests,0);assert.equal(context.needsRegistration(),fals
 vm.runInContext('load();',context);assert.equal(context.needsRegistration(),false);assert.ok(context.renderProfile().includes('Gerar sugestão com Gemini'));
 await events.submit({target:form,preventDefault(){}});assert.equal(generationRequests,0);assert.ok(context.renderProfile().includes('Autorize o envio'));
 console.log('PASS: cadastro obrigatório na primeira entrada, perfil salvo sem Gemini/consentimento, conclusão persistida e geração com autorização separada.');
+
+assert.ok(context.renderAccountActions().includes('Minha conta'));assert.ok(context.renderAccountActions().includes('data-profile="logout"'));
+let logoutPath;context.fetch=async path=>{logoutPath=path;return Response.json({ok:true})};
+await events.click({target:{closest(){return {dataset:{profile:'logout'}}}}});
+assert.equal(logoutPath,'/api/auth/logout');assert.equal(context.location.hash,'#perfil');assert.ok(context.renderAccountActions().includes('Entrar'));assert.ok(!context.renderAccountActions().includes('data-profile="logout"'));assert.ok(context.renderProfile().includes('Entrar com Google'));
+console.log('PASS: ações da conta no cabeçalho, logout chama API e retorna ao login; estado desconectado sem botão de saída.');
