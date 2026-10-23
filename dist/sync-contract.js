@@ -1,5 +1,5 @@
 import {validatePlanArchive,checkedSuggestion,allGeneratedSessions} from './active-plan.js';
-import {validateProfile} from './training-contract.js';
+import {validateStoredProfile} from './training-contract.js';
 import {SESSIONS} from './plan.js';
 export function validateAccountDocument(raw,owner){
  if(raw?.version!==1)throw new Error('Formato de sincronização inválido.');
@@ -9,7 +9,7 @@ export function validateAccountDocument(raw,owner){
  if(raw.profile!==null){
   const p=raw.profile;
   if(p?.plan)profile=checkedSuggestion(p);
-  else profile={profile:validateProfile(p?.profile,p?.profile?.startDate)};
+  else profile={profile:validateStoredProfile(p?.profile,p?.profile?.startDate)};
  }
  const sources=new Map([...SESSIONS,...allGeneratedSessions(archive)].map(s=>[s.id,s]));
  const logs={};
@@ -20,6 +20,6 @@ export function validateAccountDocument(raw,owner){
   logs[id]={km:x.km,minutes:x.minutes,rpe:x.rpe,pain:x.pain,notes:x.notes,date:s.date,updatedAt:x.updatedAt};
  }
  const checklist={};for(let i=0;i<8;i++)checklist[i]=raw.state.checklist?.[i]===true;
- const draft=raw.draft?validateProfile(raw.draft,raw.draft.startDate):null;
+ const draft=raw.draft?validateStoredProfile(raw.draft,raw.draft.startDate):null;
  return {version:1,profile,draft,archive,state:{version:1,logs,checklist,timer:null}};
 }

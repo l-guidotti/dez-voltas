@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
-import {validateProfile,validateSuggestion,addDate,localToday,daysBetween} from '../dist/training-contract.js';
+import {validateProfile,validateStoredProfile,validateSuggestion,addDate,localToday,daysBetween} from '../dist/training-contract.js';
 import {handleApi,trainingCalendar,schemaForCalendar,phaseCalendar,attachPhaseDates} from '../server/api.js';
 globalThis.crypto ??= webcrypto;
 const start=localToday();
@@ -53,8 +53,9 @@ const googleCallback=await handleApi(request('auth/callback',{code:'google-code'
 let r=await handleApi(request('auth/link',{email:user.email},''),env);assert.equal(r.status,200);assert.match(r.headers.get('set-cookie'),/HttpOnly; Secure; SameSite=Lax/);const pkce=/__Host-dv-pkce=([^;]+)/.exec(r.headers.get('set-cookie'))[1];const otp=calls.find(x=>x.url.includes('/otp?'));assert.equal(JSON.parse(otp.options.body).code_challenge_method,'s256');assert.ok(JSON.parse(otp.options.body).code_challenge);
 assert.equal((await handleApi(request('auth/callback',{code:'x'},''),env)).status,401);
 r=await handleApi(request('auth/callback',{code:'x'},'__Host-dv-pkce='+pkce),env);assert.equal(r.status,200);assert.match(r.headers.get('set-cookie'),/__Host-dv-access=confirmed-access/);assert.ok(!(await r.text()).includes('confirmed-access'));
-r=await handleApi(request('training/suggest',{...raw,email:'do-not-send@example.com'}),env);assert.equal(r.status,200);assert.equal((await r.json()).plan.weeks.length,4);const call=calls.find(x=>x.url.includes('generateContent'));assert.ok(!call.options.body.includes('@'));assert.equal(call.options.headers['x-goog-api-key'],'secret');
-const payload=JSON.parse(call.options.body),sent=JSON.parse(payload.contents[0].parts[0].text);assert.equal(sent.calendar[0].start,p.startDate);assert.deepEqual(sent.profile.days,p.days);assert.equal(payload.generationConfig.responseJsonSchema.properties.weeks.prefixItems.length,4);
+const details={registrationCompleted:true,eventName:'Prova local',terrain:'trail',elevationM:450,experience:'returning',experienceMonths:18,recentRuns:2,longDay:null,finishMinutes:null};
+r=await handleApi(request('training/suggest',{...raw,details,email:'do-not-send@example.com'}),env);assert.equal(r.status,200);assert.equal((await r.json()).plan.weeks.length,4);const call=calls.find(x=>x.url.includes('generateContent'));assert.ok(!call.options.body.includes('@'));assert.equal(call.options.headers['x-goog-api-key'],'secret');
+const payload=JSON.parse(call.options.body),sent=JSON.parse(payload.contents[0].parts[0].text);assert.equal(sent.calendar[0].start,p.startDate);assert.deepEqual(sent.profile.days,p.days);assert.equal(sent.profile.details.terrain,'trail');assert.equal(sent.profile.details.elevationM,450);assert.equal(payload.generationConfig.responseJsonSchema.properties.weeks.prefixItems.length,4);
 assert.deepEqual(sent.phases,phaseCalendar(p));
 for(let i=0;i<4;i++)assert.equal((await handleApi(request('training/suggest',raw),env)).status,200);
 assert.equal((await handleApi(request('training/suggest',raw),env)).status,429);
@@ -76,3 +77,11 @@ r=await handleApi(request('training/check',{}),otherEnv);assert.ok((await r.text
 globalThis.fetch=async()=>Response.json({external:{google:false}});
 r=await handleApi(request('auth/google',{},''),otherEnv);assert.equal(r.status,503);assert.ok((await r.text()).includes('use o link por e-mail'));
 console.log('PASS: perfil, datas, disponibilidade, totais, carga inicial, PKCE, cookies, autenticação, consentimento, origem, anonimização, cota e erros do Gemini (provedores simulados).');
+
+const stored=validateStoredProfile({...raw,consent:false,details:{...details,registrationCompleted:false}});assert.equal(stored.consent,false);assert.equal(stored.details.registrationCompleted,false);assert.throws(()=>validateProfile(stored),/Autorize/);
+for(const patch of [{longDay:1},{terrain:'unknown'},{experienceMonths:-1},{recentRuns:8},{finishMinutes:120},{eventName:'x'.repeat(121)},{registrationCompleted:'true'}])assert.throws(()=>validateProfile({...raw,details:{...details,...patch}}));
+const restricted=validateProfile({...raw,details:{...details,longDay:0}});for(const week of trainingCalendar(restricted))assert.ok(week.longDates.every(date=>new Date(date+'T12:00:00Z').getUTCDay()===0));
+const candidate=sample();const firstSession=candidate.weeks[0].sessions[0];const wrongLongDay=p.days.find(d=>d!==new Date(firstSession.date+'T12:00:00Z').getUTCDay());firstSession.long=true;assert.throws(()=>validateSuggestion(candidate,{...p,details:{...details,longDay:wrongLongDay}}),/fora do dia/);
+globalThis.fetch=async()=>Response.json(user);
+assert.equal((await handleApi(request('training/suggest',{...raw,details:{...details,registrationCompleted:false}}),otherEnv)).status,409);
+console.log('PASS: novos campos do cadastro, perfil sem consentimento, dia obrigatório do longo e contexto enviado à IA; compatibilidade com perfis anteriores.');

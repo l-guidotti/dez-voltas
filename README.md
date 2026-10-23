@@ -45,3 +45,5 @@ Não é necessário converter o projeto Pages para integração Git nem trocar o
 Configuração detalhada: [README-GEMINI.md](README-GEMINI.md).
 
 Persistência e diário: [BANCO-SUPABASE.md](BANCO-SUPABASE.md). O banco já foi aplicado no projeto Supabase; não exige novas chaves no Cloudflare.
+
+No primeiro acesso de contas sem perfil, o cadastro de corredor aparece antes das demais telas: objetivo/prova, histórico recente, disponibilidade e revisão. A conclusão é persistida em `details.registrationCompleted`. Perfis anteriores permanecem válidos e não repetem o cadastro. O perfil pode ser salvo sem consentimento para IA; gerar um plano exige autorização explícita e cadastro concluído para os novos perfis. Campos opcionais incluem experiência, frequência recente, terreno, desnível, dia do longo e tempo desejado para a distância. Nenhuma nova tabela ou chave de API é necessária.

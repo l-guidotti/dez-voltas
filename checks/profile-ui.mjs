@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {validateProfile,validateSuggestion,localToday,addDate} from '../dist/training-contract.js';
+import {validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate} from '../dist/training-contract.js';
 const events={},storage=new Map();
-const context=vm.createContext({configureAccountSync(){},connectAccount:async()=>{},accountChanged(){},syncMessage:()=>'Sincronizado',hasSyncConflict:()=>false,synchronize:async()=>{},resolveSync:async()=>{},replaceOwnerArchive(){},adoptSuggestion:(owner,result)=>{context.adopted={owner,result}},setPlanOwner(){},getActivePlan:()=>null,validateProfile,validateSuggestion,localToday,addDate,Intl,Date,URL,URLSearchParams,Blob,setTimeout,clearTimeout,AbortController,Event,requestAnimationFrame:fn=>fn(),document:{addEventListener:(type,callback)=>events[type]=callback,querySelector:()=>null},window:{addEventListener(){},dispatchEvent(){}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},fetch:async()=>{throw Error('offline')},location:{href:'https://example.com/#perfil'},history:{replaceState(){}}});
+const context=vm.createContext({configureAccountSync(){},connectAccount:async()=>{},accountChanged(){},syncMessage:()=>'Sincronizado',hasSyncConflict:()=>false,synchronize:async()=>{},resolveSync:async()=>{},replaceOwnerArchive(){},adoptSuggestion:(owner,result)=>{context.adopted={owner,result}},setPlanOwner(){},getActivePlan:()=>null,validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate,Intl,Date,URL,URLSearchParams,Blob,setTimeout,clearTimeout,AbortController,Event,requestAnimationFrame:fn=>fn(),document:{addEventListener:(type,callback)=>events[type]=callback,querySelector:()=>null},window:{addEventListener(){},dispatchEvent(){}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},fetch:async()=>{throw Error('offline')},location:{href:'https://example.com/#perfil'},history:{replaceState(){}}});
 vm.runInContext(fs.readFileSync('dist/profile.js','utf8').replace(/^import .*;\n/gm,'').replace(/export /g,''),context);
-let html=context.renderProfile();assert.ok(html.includes('Receber link de acesso'));assert.ok(html.includes('name="consent"'));assert.ok(html.includes('Gerar sugestão com Gemini'));assert.equal((html.match(/name="days"/g)||[]).length,7);
+let html=context.renderProfile();assert.ok(html.includes('Receber link de acesso'));assert.ok(!html.includes('id="profile-goal"'));assert.ok(html.includes('primeiro acesso'));
 vm.runInContext(`account={id:'uid-a',email:'<script>@example.com'}; authChecked=true;`,context);
-html=context.renderProfile();assert.ok(!html.includes('<script>'));assert.ok(html.includes('&lt;script&gt;@example.com'));
+html=context.renderProfile();assert.ok(html.includes('name="consent"'));assert.ok(html.includes('Gerar sugestão com Gemini'));assert.equal((html.match(/name="days"/g)||[]).length,7);assert.ok(!html.includes('<script>'));assert.ok(html.includes('&lt;script&gt;@example.com'));
 await context.initProfile();html=context.renderProfile();assert.ok(html.includes('Sem conexão.'));
 
 const fields={goal:'backyard',target:10,startDate:localToday(),targetDate:addDate(localToday(),170),weeklyKm:10,longestKm:8,weeksConsistent:2,maxMinutes:60,longMinutes:120,pain:'none',days:[0,2,3,5],consent:'on'};
@@ -48,3 +48,14 @@ context.location.assign=url=>{context.assignedUrl=url};context.fetch=async path=
 await events.click({target:{closest(){return {dataset:{profile:'google'}}}}});assert.equal(context.assignedUrl,'https://auth.example.com/auth/v1/authorize?provider=google');
 vm.runInContext('busy=false;',context);context.location.href='https://example.com/?auth=callback#error=access_denied&error_description=untrusted-text';await context.initProfile();assert.ok(context.renderProfile().includes('A entrada foi cancelada'));assert.ok(!context.renderProfile().includes('untrusted-text'));
 console.log('PASS: formulário, login, escape; envio autenticado, consentimento, erro junto ao botão, resultado com foco e limite de espera preservando sugestão anterior (simulados).');
+
+// A new account must complete registration once; saving does not invoke Gemini.
+vm.runInContext("account={id:'new-runner',email:'new@example.com'};draft=null;result=null;busy=false;load();",context);
+assert.equal(context.needsRegistration(),true);html=context.renderProfile();assert.ok(html.includes('Concluir cadastro'));assert.ok(!html.includes('Gerar sugestão com Gemini'));assert.ok(!html.includes('name="consent"'));
+fields.goal='distance';fields.target=10;fields.consent=null;fields.eventName='Prova local';fields.terrain='trail';fields.experience='returning';fields.recentRuns=2;fields.longDay=0;fields.finishMinutes=75;
+let generationRequests=0;context.fetch=async()=>{generationRequests++;throw Error('must not request Gemini')};
+await events.click({target:{closest(){return {dataset:{profile:'save-profile'}}}}});
+assert.equal(generationRequests,0);assert.equal(context.needsRegistration(),false);const registered=JSON.parse(storage.get('dez-voltas-draft-v1:new-runner'));assert.equal(registered.details.registrationCompleted,true);assert.equal(registered.details.terrain,'trail');assert.equal(registered.consent,false);
+vm.runInContext('load();',context);assert.equal(context.needsRegistration(),false);assert.ok(context.renderProfile().includes('Gerar sugestão com Gemini'));
+await events.submit({target:form,preventDefault(){}});assert.equal(generationRequests,0);assert.ok(context.renderProfile().includes('Autorize o envio'));
+console.log('PASS: cadastro obrigatório na primeira entrada, perfil salvo sem Gemini/consentimento, conclusão persistida e geração com autorização separada.');
