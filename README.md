@@ -43,3 +43,5 @@ Não é necessário converter o projeto Pages para integração Git nem trocar o
 - A disponibilidade do modelo e as cotas da conta Google precisam de validação real. Consultar metadados não comprova que a geração está habilitada.
 
 Configuração detalhada: [README-GEMINI.md](README-GEMINI.md).
+
+Persistência e diário: [BANCO-SUPABASE.md](BANCO-SUPABASE.md). O banco já foi aplicado no projeto Supabase; não exige novas chaves no Cloudflare.

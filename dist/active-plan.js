@@ -17,7 +17,7 @@ export function validatePlanArchive(raw){
  return out;
 }
 let archive=empty();try{const saved=JSON.parse(localStorage.getItem(PLAN_ARCHIVE_KEY)||'null');if(saved)archive=validatePlanArchive(saved);}catch{}
-function persist(next){localStorage.setItem(PLAN_ARCHIVE_KEY,JSON.stringify(next));archive=next;}
+function persist(next){localStorage.setItem(PLAN_ARCHIVE_KEY,JSON.stringify(next));archive=next;if(typeof window!=='undefined')window.dispatchEvent(new Event('account-data-change'));}
 export function setPlanOwner(owner){const id=owner===null?null:ownerId(owner);if(archive.owner===id)return;const next={...archive,owner:id};try{persist(next);}catch{archive=next;}}
 export function getActivePlan(){return archive.plans.find(x=>x.owner===archive.owner&&x.active)||null;}
 export function adoptSuggestion(owner,raw){owner=ownerId(owner);const result=checkedSuggestion(raw),id=planId(result,owner);const existing=archive.plans.find(x=>x.id===id);if(existing&&(existing.owner!==owner||JSON.stringify(checkedSuggestion(existing))!==JSON.stringify(result)))throw new Error('Identificação já utilizada por outro plano.');const plans=archive.plans.filter(x=>x.id!==id).map(x=>x.owner===owner?{...x,active:false}:x);plans.push({...result,id,owner,active:true});if(plans.length>100)throw new Error('Limite de planos locais atingido. Exporte um backup antes de continuar.');persist({version:1,owner,plans});return getActivePlan();}
@@ -27,3 +27,9 @@ export function mergePlanArchive(raw){const incoming=validatePlanArchive(raw),pl
 export function sessionsForPlan(entry){return entry.plan.weeks.flatMap((w,i)=>w.sessions.map((s,j)=>({...s,id:`${entry.id}-w${i+1}s${j}`,week:i+1,generated:true,planId:entry.id})));}
 export function allGeneratedSessions(raw=archive){return raw.plans.flatMap(sessionsForPlan);}
 export function visibleGeneratedSessions(){return archive.plans.filter(x=>x.owner===archive.owner).flatMap(sessionsForPlan);}
+
+export function replaceOwnerArchive(owner,raw){
+ const incoming=validatePlanArchive(raw);
+ if(incoming.owner!==owner||incoming.plans.some(p=>p.owner!==owner))throw new Error('Arquivo de outra conta.');
+ persist(validatePlanArchive({version:1,owner,plans:[...archive.plans.filter(p=>p.owner!==owner),...incoming.plans]}));
+}

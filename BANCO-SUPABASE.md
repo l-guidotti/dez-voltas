@@ -1,0 +1,17 @@
+# Dados da conta e diário
+
+O banco é Postgres do projeto Supabase existente. `database/account-data.sql` registra a migração aplicada. Não exige service_role, MySQL ou novos Secrets no Cloudflare.
+
+`public.account_data` mantém um documento por `auth.users.id`: perfil, formulário válido, última sugestão, planos adotados/arquivados, diário (distância, duração, RPE, dor, observações, data e edição) e checklist. O cronômetro em andamento permanece apenas local. O documento mantém definições dos planos e registros juntos de forma atômica; está limitado a 2 MiB e 100 planos. Uma estrutura de tabelas separadas pode ser introduzida quando forem necessários relatórios agregados.
+
+RLS restringe SELECT/INSERT/UPDATE ao próprio usuário. `anon` não recebe acesso. A API `/api/account/data` verifica a sessão com Supabase Auth e utiliza o token do usuário para acessar PostgREST. Nenhuma chave privilegiada é utilizada. `save_account_data` usa SECURITY INVOKER, busca `auth.uid()` e faz compare-and-swap de revisão; escritas concorrentes não substituem silenciosamente uma revisão diferente. Excluir a conta Auth remove seus dados via ON DELETE CASCADE. Não há exclusão da conta pela interface nesta entrega.
+
+Após entrar, a cópia existente no navegador é migrada para a primeira conta que usar esta versão. Dados de planos de outra conta são filtrados. Uma cópia anterior à migração fica em `dez-voltas-legacy-backup`. Nas próximas entradas, cada conta usa seu cache separado. Ao sair, o diário visível é limpo; o cache por conta permanece no aparelho. Como em qualquer app com dados offline, isso não substitui um bloqueio do dispositivo.
+
+Abra primeiro no navegador que já contém seus dados. Em Perfil, aguarde **Sincronizado com sua conta**. Depois entre com a mesma conta em outro aparelho e verifique Plano e Diário. Um aparelho novo com cópia vazia carrega os dados remotos automaticamente. Formulários incompletos ficam em memória; campos validados são salvos. Novas sugestões são guardadas, mas só substituem o calendário ao clicar **Usar este plano**.
+
+Alterações usam fila persistida no navegador e envio após aproximadamente um segundo. A sincronização também ocorre ao recuperar internet, focar a janela e a cada minuto. O cache da última conta é retomado offline, permitindo continuar registrando. Sessão expirada mantém a cópia local e pede nova entrada; renovação automática da sessão continua fora desta entrega.
+
+Se houver edições nos dois aparelhos, Perfil mostra o conflito. O usuário escolhe carregar a cópia da nuvem ou enviar a cópia local completa, confirmando antes da substituição. Não há mesclagem automática de diário/planos. Ao carregar a nuvem, a cópia local anterior fica em cache de recuperação e pode ser baixada como backup dos planos/diário no Perfil; perfil/rascunho também estão incluídos como metadados nesse arquivo. O importador atual restaura os planos/diário, não os metadados do formulário. Backups manuais continuam disponíveis. Alterações offline ainda não enviadas dependem do armazenamento do aparelho.
+
+Validação: `npm test` inclui API autenticada e testes de dois aparelhos simulados, diário offline/reabertura, conflito e recuperação, troca de conta e validação dos dados. Testes SQL reais em transação com rollback confirmam leitura/escrita do dono, bloqueio de outro usuário e rejeição de revisão obsoleta. Os advisors não apontaram problemas de RLS da tabela. Teste real de sincronização entre dois navegadores deve ser feito após a publicação; o ambiente de execução não tem navegador conectado.
