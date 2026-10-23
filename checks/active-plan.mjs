@@ -1,3 +1,4 @@
+import * as personalization from '../dist/goal-context.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -21,7 +22,7 @@ function app(){
  const make=()=>({innerHTML:'',textContent:'',value:'',handlers:{},classList:{add(){},remove(){},toggle(){}},addEventListener(n,fn){this.handlers[n]=fn},querySelectorAll(){return []},focus(){},select(){},showModal(){this.open=true},close(){this.open=false},click(){},remove(){}});
  const document={querySelector(s){if(!elements.has(s))elements.set(s,make());return elements.get(s)},querySelectorAll(){return []},addEventListener:(n,fn)=>events[n]=fn,body:make(),createElement:make};
  class FixedDate extends Date{constructor(...args){super(...(args.length?args:['2026-10-28T15:00:00Z']));}static now(){return new Date('2026-10-28T15:00:00Z').getTime();}}
- const ctx=vm.createContext({renderAccountActions:()=>'<a href="#perfil">Entrar</a>',needsRegistration:()=>false,configureAccountSync(value){ctx.syncAdapter=value},resumeAccountSync(){},connectAccount:async()=>{},accountChanged(){},syncMessage:()=>'Sincronizado',hasSyncConflict:()=>false,synchronize:async()=>{},resolveSync:async()=>{},replaceOwnerArchive(){},...baseline,...active,console,document,renderProfile:()=>'<h1>Meu objetivo</h1>',localStorage:globalThis.localStorage,navigator:{onLine:true},location:{hash:'#plano'},window:{addEventListener(){},dispatchEvent(){},scrollTo(){}},matchMedia:()=>({matches:false}),setTimeout:()=>1,clearTimeout(){},setInterval(){},Date:FixedDate,Intl,URL,Blob,Event,FormData:class{constructor(form){this.data=form.data}get(k){return this.data[k]}},exportWorkoutFit,workoutRecipe,workoutInstructions});
+ const ctx=vm.createContext({...personalization,renderAccountActions:()=>'<a href="#perfil">Entrar</a>',needsRegistration:()=>false,configureAccountSync(value){ctx.syncAdapter=value},resumeAccountSync(){},connectAccount:async()=>{},accountChanged(){},syncMessage:()=>'Sincronizado',hasSyncConflict:()=>false,synchronize:async()=>{},resolveSync:async()=>{},replaceOwnerArchive(){},...baseline,...active,console,document,renderProfile:()=>'<h1>Meu objetivo</h1>',localStorage:globalThis.localStorage,navigator:{onLine:true},location:{hash:'#plano'},window:{addEventListener(){},dispatchEvent(){},scrollTo(){}},matchMedia:()=>({matches:false}),setTimeout:()=>1,clearTimeout(){},setInterval(){},Date:FixedDate,Intl,URL,Blob,Event,FormData:class{constructor(form){this.data=form.data}get(k){return this.data[k]}},exportWorkoutFit,workoutRecipe,workoutInstructions});
  vm.runInContext(code,ctx);vm.runInContext('download=(content,name,type)=>{globalThis.downloaded={content,name,type}}',ctx);
  return {ctx,document,events,elements};
 }
@@ -46,7 +47,7 @@ store.clear();active=await import('../dist/active-plan.js?restore');a=app();asse
 await a.elements.get('#import-file').handlers.change({target:{files:[{size:JSON.stringify(backup).length,text:async()=>JSON.stringify(backup)}],value:''}});
 await a.events.click({target:{closest(){return {dataset:{action:'confirm-import'}}}}});
 assert.equal(active.getActivePlan().id,second.id);assert.equal(JSON.parse(store.get('dez-voltas-v1')).logs[firstId].km,5.2);
-active.useOriginalPlan();a.ctx.location.hash='#plano';a.ctx.render();assert.ok(a.document.querySelector('#main').innerHTML.includes('OITO SEMANAS'));assert.equal(active.allGeneratedSessions().length,8);
+active.useOriginalPlan();a.ctx.location.hash='#plano';a.ctx.render();assert.ok(a.document.querySelector('#main').innerHTML.includes('Nenhum plano em uso'));assert.equal(active.allGeneratedSessions().length,8);
 active.setPlanOwner('other');assert.equal(active.getActivePlan(),null);assert.equal(active.visibleGeneratedSessions().length,0);assert.equal(active.allGeneratedSessions().length,8);
 active.setPlanOwner('runner');active.adoptSuggestion('runner',suggestion('2026-10-22T23:00:00Z'));const before=active.getActivePlan();const savedSetter=globalThis.localStorage.setItem;globalThis.localStorage.setItem=()=>{throw Error('Storage full')};assert.throws(()=>active.adoptSuggestion('runner',suggestion('2026-10-23T00:00:00Z')));assert.equal(active.getActivePlan().id,before.id);globalThis.localStorage.setItem=savedSetter;
 const bad=suggestion();bad.plan.phases=[];assert.throws(()=>active.adoptSuggestion('runner',bad));assert.equal(active.getActivePlan().id,before.id);

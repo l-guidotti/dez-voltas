@@ -1,6 +1,6 @@
 # Dez Voltas
 
-PWA de preparação para corrida: plano, diário local, guia de prova, exportações e sugestões personalizadas com Gemini.
+PWA de preparação para corrida: plano, diário sincronizado, guia do objetivo, exportações e sugestões personalizadas com Gemini.
 
 Produção: https://dez-voltas.pages.dev/
 
@@ -51,3 +51,5 @@ No primeiro acesso de contas sem perfil, o cadastro de corredor aparece antes da
 Banco separado e sincronização incremental: perfil, planos, sessões e diário têm tabelas próprias e revisões por registro. A API `/api/account/sync` transmite alterações desde o cursor do aparelho e combina edições em treinos diferentes. Os documentos antigos foram preservados para recuperação; versões antigas precisam atualizar a PWA antes de sincronizar. Consulte [BANCO-SUPABASE.md](BANCO-SUPABASE.md).
 
 Sessão persistente e renovação automática: [SESSAO.md](SESSAO.md). Tokens ficam somente em cookies HttpOnly. As requisições de treino/sincronização repetem uma única vez após renovar a sessão e verificam a conta esperada antes de gravar.
+
+Personalização de Hoje, Objetivo e Guia: [PERSONALIZACAO.md](PERSONALIZACAO.md). As telas usam o objetivo do plano em uso; sem plano adotado, usam o cadastro salvo. Metas por distância, tempo e backyard recebem conteúdos próprios, e novas contas não recebem o calendário original.

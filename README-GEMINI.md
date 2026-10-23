@@ -9,7 +9,7 @@ Código preparado para Cloudflare Pages. Não está publicado nem conectado a co
 - Autorização explícita para enviar os dados de treino ao Gemini. E-mail e identificador de conta não são enviados ao modelo.
 - Gemini gera fases contíguas para toda a preparação, e até 28 dias de sessões detalhadas. O restante é uma orientação a revisar conforme os treinos realizados.
 - Validação no servidor: esquema, datas, dias disponíveis, tempos, totais, longo e limites conservadores de carga inicial. Esses limites são regras do produto, não uma fórmula universal de prevenção de lesões. Dor/retorno de lesão solicita revisão profissional antes de gerar cargas.
-- Sugestão fica em revisão e pode ser salva localmente por ID de usuário e baixada em JSON. O plano original, registros, cronômetro e Zepp foram preservados. O botão Usar este plano atualiza Plano, Hoje, sessões para registro e exportação de agenda. Os registros de planos anteriores são preservados.
+- Sugestão fica em revisão e pode ser salva localmente por ID de usuário e baixada em JSON. Os registros históricos, cronômetro e ferramentas de exportação foram preservados; o plano pessoal original não aparece como calendário padrão. O botão Usar este plano atualiza Plano, Hoje, sessões para registro e exportação de agenda. Os registros de planos anteriores são preservados.
 
 ## Configuração necessária
 
@@ -32,9 +32,9 @@ npm test
 npx wrangler@4 pages deploy dist --project-name dez-voltas --branch main
 ```
 
-Configure os bindings/segredos no painel antes e confirme a proteção de acesso. O projeto continua contendo o plano pessoal original; preserve a restrição Cloudflare Access enquanto ele estiver no pacote. A autenticação de novas contas não torna automaticamente adequado publicar os dados pessoais desse plano. Uma futura versão multiusuário deve tornar a experiência inicial genérica e isolar perfis no banco por usuário.
+Configure os bindings e segredos no painel antes de publicar. A experiência inicial é genérica, e os dados de contas são isolados por usuário no Supabase. As definições do calendário inicial ficam apenas para compatibilidade com registros e backups antigos; não são o plano padrão de novas contas. Consulte PERSONALIZACAO.md.
 
-O service worker não intercepta `/api/`; respostas de autenticação e sugestões usam `Cache-Control: no-store`. O cache da PWA foi atualizado para v14. O token de acesso tem duração curta; o servidor conserva o refresh token em cookie protegido e a PWA renova a sessão automaticamente. Consulte SESSAO.md para concorrência, saída e migração das sessões antigas. No iPhone, abra o link no navegador que iniciou o acesso; Safari/PWA podem não compartilhar cookies. Se o link abrir em outro contexto, peça outro no Safari e continue nele.
+O service worker não intercepta `/api/`; respostas de autenticação e sugestões usam `Cache-Control: no-store`. O cache da PWA foi atualizado para v15. O token de acesso tem duração curta; o servidor conserva o refresh token em cookie protegido e a PWA renova a sessão automaticamente. Consulte SESSAO.md para concorrência, saída e migração das sessões antigas. No iPhone, abra o link no navegador que iniciou o acesso; Safari/PWA podem não compartilhar cookies. Se o link abrir em outro contexto, peça outro no Safari e continue nele.
 
 ## Validação e limites da entrega
 
@@ -66,7 +66,7 @@ O servidor também calcula intervalos contíguos das fases, do início até a da
 
 ## Adoção da sugestão como plano
 
-Usar este plano valida e salva a proposta no aparelho, associada à conta confirmada. Plano e Hoje usam o bloco adotado; sessões têm IDs próprios para manter registros ao trocar de proposta. É possível registrar e editar sessões passadas, usar o cronômetro e exportar a agenda do plano ativo. Treinos futuros não podem ser registrados. Voltar ao plano original não apaga o histórico. O backup inclui o arquivo de planos adotados e a restauração mantém suas definições junto dos registros. A sessão verificada seleciona o plano da conta; no acesso offline o último plano local pode ser consultado. Os dados têm uma cópia local no navegador (sem criptografia própria) e sincronização autenticada com o Supabase; o backup contém o histórico local desse navegador. O roteiro Zepp para treinos gerados representa a distância principal e inclui as orientações completas como referência; não traduz automaticamente intervalos para etapas FIT.
+Usar este plano valida e salva a proposta no aparelho, associada à conta confirmada. Plano e Hoje usam o bloco adotado; sessões têm IDs próprios para manter registros ao trocar de proposta. É possível registrar e editar sessões passadas, usar o cronômetro e exportar a agenda do plano ativo. Treinos futuros não podem ser registrados. Desativar o plano atual não apaga o histórico nem ativa automaticamente o calendário original. O backup inclui o arquivo de planos adotados e a restauração mantém suas definições junto dos registros. A sessão verificada seleciona o plano da conta; no acesso offline o último plano local pode ser consultado. Os dados têm uma cópia local no navegador (sem criptografia própria) e sincronização autenticada com o Supabase; o backup contém o histórico local desse navegador. O roteiro Zepp para treinos gerados representa a distância principal e inclui as orientações completas como referência; não traduz automaticamente intervalos para etapas FIT.
 
 ## Login Google
 
