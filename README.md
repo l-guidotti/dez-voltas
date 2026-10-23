@@ -55,3 +55,5 @@ Sessão persistente e renovação automática: [SESSAO.md](SESSAO.md). Tokens fi
 Personalização de Hoje, Objetivo e Guia: [PERSONALIZACAO.md](PERSONALIZACAO.md). As telas usam o objetivo do plano em uso; sem plano adotado, usam o cadastro salvo. Metas por distância, tempo e backyard recebem conteúdos próprios, e novas contas não recebem o calendário original.
 
 Geração assíncrona com andamento e resultado recuperável: [FILA-IA.md](FILA-IA.md). É possível fechar o PWA após a confirmação de que a solicitação foi salva.
+
+Evolução ao longo da preparação: [EVOLUCAO.md](EVOLUCAO.md). Na seção Plano, feche a semana com recuperação e disponibilidade. Com autorização, o Gemini revisa o próximo bloco após encerrar a semana, usando o diário sincronizado e a mesma fila/limites de custo.

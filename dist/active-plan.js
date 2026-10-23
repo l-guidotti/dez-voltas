@@ -4,7 +4,7 @@ const empty=()=>({version:1,owner:null,plans:[]});
 const clone=x=>JSON.parse(JSON.stringify(x));
 function ownerId(x){if(typeof x!=='string'||!/^[a-zA-Z0-9_-]{1,128}$/.test(x))throw new Error('Conta do plano inválida.');return x;}
 export function checkedSuggestion(raw){
- const profile=validateProfile(raw?.profile,raw?.profile?.startDate);
+ const profile=validateProfile(raw?.profile,raw?.profile?.startDate,{allowReview:true});
  const plan=validateSuggestion(raw?.plan,profile);
  if(typeof raw.generatedAt!=='string'||raw.generatedAt.length>80||!Number.isFinite(Date.parse(raw.generatedAt)))throw new Error('Data de geração inválida.');
  return {version:1,profile,plan,generatedAt:raw.generatedAt,model:String(raw.model||'Gemini').slice(0,120)};

@@ -1,12 +1,14 @@
 import {sessionFetch} from './session-client.js';
 import {validateAccountDocument} from './sync-contract.js';
 import {documentRows,rowsDocument,rowChanges,overlayRows,rowKey,same} from './relational-contract.js';
+let synchronized=false;
 let adapter,owner=null,epoch=0,cursor=0,base=new Map(),conflicts=new Set(),legacy=null,busy=false,timer,message='Entre na conta para sincronizar.',applying=false;
 const key=id=>'dez-voltas-cloud-v2:'+id;
 const clone=x=>JSON.parse(JSON.stringify(x));
 export function configureAccountSync(value){adapter=value;}
 export function activeSyncOwner(){return owner;}
 export function syncMessage(){return message;}
+export function accountSyncReady(expectedOwner){return synchronized&&owner===expectedOwner&&!busy&&!legacy&&!conflicts.size&&!!adapter&&rowChanges(base,adapter.capture(owner),owner).length===0;}
 export function hasSyncConflict(){return conflicts.size>0;}
 function report(text){message=text;window.dispatchEvent(new Event('sync-status'));}
 function cache(){if(owner)localStorage.setItem(key(owner),JSON.stringify({cursor,rows:[...base.values()],conflicts:[...conflicts],legacy,document:adapter.capture(owner)}));}
@@ -23,7 +25,7 @@ function receive(remote){
  base=next;cursor=remote.cursor;apply(doc);cache();
 }
 export async function connectAccount(id){
- const turn=++epoch;clearTimeout(timer);owner=id;cursor=0;base=new Map();conflicts=new Set();legacy=null;busy=false;
+ const turn=++epoch;synchronized=false;clearTimeout(timer);owner=id;cursor=0;base=new Map();conflicts=new Set();legacy=null;busy=false;
  if(!adapter)return;
  if(!id){try{localStorage.removeItem('dez-voltas-last-account');}catch{}applying=true;try{adapter.disconnect();}catch{}finally{applying=false;}report('Entre na conta para sincronizar.');return;}
  try{
@@ -38,7 +40,7 @@ export async function connectAccount(id){
 }
 export function accountChanged(){if(!owner||!adapter||applying)return;try{const saved=JSON.parse(localStorage.getItem(key(owner))||'null');if(saved&&same(saved.document,adapter.capture(owner)))return;if(legacy)legacy.dirty=true;cache();report('Alterações salvas neste aparelho. Aguardando sincronização…');clearTimeout(timer);timer=setTimeout(()=>synchronize(epoch),1000);}catch{report('Sem espaço para a cópia local. Exporte um backup.');}}
 export async function synchronize(turn=epoch){
- if(!owner||!adapter||busy||turn!==epoch)return;busy=true;
+ if(!owner||!adapter||busy||turn!==epoch)return;busy=true;synchronized=false;
  try{
   report('Sincronizando…');const remote=await request();if(turn!==epoch)return;receive(remote);
   if(conflicts.size){report(`${conflicts.size} registro(s) com alterações nos dois aparelhos. Escolha quais valores manter no Perfil.`);return;}
@@ -48,7 +50,7 @@ export async function synchronize(turn=epoch){
    // Establish the acknowledged baseline before merging edits made during the request.
    base=overlayRows(base,changes.map(row=>({...row,revision:row.revision+1})));receive(saved);
   }
-  report(conflicts.size?'Há registros em conflito. Resolva no Perfil.':rowChanges(base,adapter.capture(owner),owner).length?'Alterações locais aguardando envio…':'Sincronizado com sua conta.');
+  synchronized=true;report(conflicts.size?'Há registros em conflito. Resolva no Perfil.':rowChanges(base,adapter.capture(owner),owner).length?'Alterações locais aguardando envio…':'Sincronizado com sua conta.');
  }catch(e){if(turn!==epoch)return;report(e.status===401?'Sua sessão expirou. Entre novamente; os dados locais estão preservados.':e.status===409?'Um registro foi alterado durante o envio. Sincronize novamente para comparar.':'Não foi possível sincronizar. Sua cópia local está preservada; tente novamente online.');}
  finally{if(turn===epoch){busy=false;clearTimeout(timer);}}
 }

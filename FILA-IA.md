@@ -63,3 +63,7 @@ Cron bem-sucedido confirma o disparo SQL, não o resultado HTTP: confira também
 ## Verificação
 
 `npm test` inclui contrato/API/fluxo da fila com provedor simulado, proteção do runner, limites, recuperação de resultado, logout durante consulta e confirmação perdida. `checks/ai-queue.sql` executa assertions transacionais com rollback: idempotência, RLS entre contas, cota diária, reserva global, concorrência, leases e retentativas. Não chama Gemini nem altera contas reais. Verificação de transporte em produção usa um perfil de teste inválido, rejeitado antes de chamar o modelo. Não há nova geração faturável usada como teste automático.
+
+## Revisões semanais
+
+A fila também processa tarefas `weekly_review` com o retrato de dados do diário/fechamento, usando os mesmos limites e processador. O cron semanal só enfileira após autorização e encerramento da semana. Configuração e critérios: [EVOLUCAO.md](EVOLUCAO.md).
