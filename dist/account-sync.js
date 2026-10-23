@@ -12,7 +12,7 @@ export function accountSyncReady(expectedOwner){return synchronized&&owner===exp
 export function hasSyncConflict(){return conflicts.size>0;}
 function report(text){message=text;window.dispatchEvent(new Event('sync-status'));}
 function cache(){if(owner)localStorage.setItem(key(owner),JSON.stringify({cursor,rows:[...base.values()],conflicts:[...conflicts],legacy,document:adapter.capture(owner)}));}
-async function request(body){const r=await sessionFetch('/api/account/sync'+(body?'':'?since='+cursor),{method:body?'POST':'GET',credentials:'same-origin',headers:{'x-account-id':owner,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});const data=await r.json();if(!r.ok){const e=new Error(data.error||'Falha de sincronização.');e.status=r.status;throw e;}return data;}
+async function request(body){const r=await sessionFetch('/api/account/sync'+(body?'':'?since='+cursor),{method:body?'POST':'GET',credentials:'same-origin',headers:{'x-dv-training-format':'2','x-account-id':owner,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});const data=await r.json();if(!r.ok){const e=new Error(data.error||'Falha de sincronização.');e.status=r.status;throw e;}return data;}
 function apply(document){applying=true;try{adapter.apply(validateAccountDocument(document,owner),owner);}finally{applying=false;}}
 function receive(remote){
  const local=clone(adapter.capture(owner));let pending=rowChanges(base,local,owner);const next=overlayRows(base,remote.rows);
@@ -51,7 +51,7 @@ export async function synchronize(turn=epoch){
    base=overlayRows(base,changes.map(row=>({...row,revision:row.revision+1})));receive(saved);
   }
   synchronized=true;report(conflicts.size?'Há registros em conflito. Resolva no Perfil.':rowChanges(base,adapter.capture(owner),owner).length?'Alterações locais aguardando envio…':'Sincronizado com sua conta.');
- }catch(e){if(turn!==epoch)return;report(e.status===401?'Sua sessão expirou. Entre novamente; os dados locais estão preservados.':e.status===409?'Um registro foi alterado durante o envio. Sincronize novamente para comparar.':'Não foi possível sincronizar. Sua cópia local está preservada; tente novamente online.');}
+ }catch(e){if(turn!==epoch)return;report(e.status===426?e.message:e.status===401?'Sua sessão expirou. Entre novamente; os dados locais estão preservados.':e.status===409?'Um registro foi alterado durante o envio. Sincronize novamente para comparar.':'Não foi possível sincronizar. Sua cópia local está preservada; tente novamente online.');}
  finally{if(turn===epoch){busy=false;clearTimeout(timer);}}
 }
 export async function resolveSync(useLocal){

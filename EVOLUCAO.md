@@ -67,3 +67,7 @@ order by start_time desc limit 10;
 `npm test`: cenários de manter/reduzir/progressão, dados incompletos, dores, doença, disponibilidade, esforço/carga, ausência de aumentos compostos, meta temporal, proximidade da prova, adoção/sincronização, autorização, worker da fila e troca de conta. Gemini e navegador são simulados. `checks/weekly-review.sql` verifica no banco, com rollback, semana elegível, concorrência por revisão, consentimento, congelamento, retrato do diário, idempotência da fila e isolamento de contas; executar com fila ociosa.
 
 O teste de transporte em produção usa uma conta temporária e dor informada para confirmar cron → fila → worker → conclusão sem chamar Gemini. As contas temporárias são removidas depois. Não há geração faturável automática nem teste visual em navegador nesta entrega.
+
+## Qualidade e tipos de sessão
+
+Sessões novas têm etapas estruturadas. A revisão pode preservar qualidade comprovada pelos registros dentro de limites de dose/pico e recuperação; não libera intensidade só porque houve adesão. Sono/fadiga do fechamento substituem os dados antigos. Consulte [INTENSIDADE.md](INTENSIDADE.md).

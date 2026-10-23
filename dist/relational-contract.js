@@ -16,7 +16,7 @@ export function documentRows(input,owner){
  for(const entry of entries.values()){
   const adopted=doc.archive.plans.some(p=>p.id===entry.id);
   put('plans',entry.id,{profile:entry.profile,plan:{...entry.plan,weeks:entry.plan.weeks.map(({sessions,...week})=>week)},generated_at:entry.generatedAt,model:entry.model,adopted});
-  for(const session of sessionsForPlan(entry))put('sessions',session.id,{plan_id:entry.id,week:session.week,date:session.date,title:session.title,km:session.km,minutes:session.minutes,rpe:session.rpe,long_run:session.long,instructions:session.instructions});
+  for(const session of sessionsForPlan(entry))put('sessions',session.id,{plan_id:entry.id,week:session.week,date:session.date,title:session.title,km:session.km,minutes:session.minutes,rpe:session.rpe,long_run:session.long,instructions:session.instructions,...(session.workout?{workout:session.workout}:{})});
  }
  for(const [id,log]of Object.entries(doc.state.logs)){
   if(!rows.has('sessions:'+id)){const s=SESSIONS.find(s=>s.id===id);if(!s)throw new Error('Sessão desconhecida.');put('sessions',id,{plan_id:null,week:s.week,date:s.date,title:s.title,km:s.km,minutes:null,rpe:null,long_run:s.long,instructions:''});}
@@ -28,7 +28,7 @@ export function rowsDocument(rows,owner){
  const alive=[...rows.values()].filter(r=>r.data!==null),profiles=rows.get('profiles:profile')?.data||{},settings=rows.get('settings:settings')?.data||{};
  const sessions=alive.filter(r=>r.kind==='sessions');const entries=new Map();
  for(const row of alive.filter(r=>r.kind==='plans')){
-  const d=row.data,plan={...d.plan,weeks:d.plan.weeks.map((week,i)=>({...week,sessions:sessions.filter(s=>s.data.plan_id===row.id&&s.data.week===i+1).sort((a,b)=>a.id.localeCompare(b.id,undefined,{numeric:true})).map(s=>{const x=s.data;return {date:x.date,title:x.title,km:x.km,minutes:x.minutes,rpe:x.rpe,long:x.long_run,instructions:x.instructions};})}))};
+  const d=row.data,plan={...d.plan,weeks:d.plan.weeks.map((week,i)=>({...week,sessions:sessions.filter(s=>s.data.plan_id===row.id&&s.data.week===i+1).sort((a,b)=>a.id.localeCompare(b.id,undefined,{numeric:true})).map(s=>{const x=s.data;return {date:x.date,title:x.title,km:x.km,minutes:x.minutes,rpe:x.rpe,long:x.long_run,instructions:x.instructions,...(x.workout?{workout:x.workout}:{})};})}))};
   const result=checkedSuggestion({version:1,profile:d.profile,plan,generatedAt:d.generated_at,model:d.model});
   if(suggestionId(result,owner)!==row.id)throw new Error('Identificação de plano inválida no banco.');
   entries.set(row.id,{...result,id:row.id,owner,active:row.id===settings.active_plan_id});

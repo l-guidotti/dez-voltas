@@ -34,7 +34,7 @@ npx wrangler@4 pages deploy dist --project-name dez-voltas --branch main
 
 Configure os bindings e segredos no painel antes de publicar. A experiência inicial é genérica, e os dados de contas são isolados por usuário no Supabase. As definições do calendário inicial ficam apenas para compatibilidade com registros e backups antigos; não são o plano padrão de novas contas. Consulte PERSONALIZACAO.md.
 
-O service worker não intercepta `/api/`; respostas de autenticação e sugestões usam `Cache-Control: no-store`. O cache da PWA foi atualizado para v17. O token de acesso tem duração curta; o servidor conserva o refresh token em cookie protegido e a PWA renova a sessão automaticamente. Consulte SESSAO.md para concorrência, saída e migração das sessões antigas. No iPhone, abra o link no navegador que iniciou o acesso; Safari/PWA podem não compartilhar cookies. Se o link abrir em outro contexto, peça outro no Safari e continue nele.
+O service worker não intercepta `/api/`; respostas de autenticação e sugestões usam `Cache-Control: no-store`. O cache da PWA foi atualizado para v18. O token de acesso tem duração curta; o servidor conserva o refresh token em cookie protegido e a PWA renova a sessão automaticamente. Consulte SESSAO.md para concorrência, saída e migração das sessões antigas. No iPhone, abra o link no navegador que iniciou o acesso; Safari/PWA podem não compartilhar cookies. Se o link abrir em outro contexto, peça outro no Safari e continue nele.
 
 ## Validação e limites da entrega
 
@@ -77,3 +77,5 @@ A interface oferece Google como opção principal, com link de e-mail como alter
 `POST /api/training/suggest` agora salva a solicitação e responde HTTP 202 com `job`, sem chamar Gemini nessa requisição. Acompanhe em `GET /api/training/jobs`; o resultado completo é consultado com `?id=UUID`. O processador privado é acionado por cron e salva a resposta validada no banco. O usuário pode fechar o app e voltar depois. O resultado só entra no calendário após adoção explícita. A instrução de espera síncrona acima é histórica e foi substituída por esse fluxo. Configuração, limites, segurança e monitoramento: [FILA-IA.md](FILA-IA.md).
 
 Revisões semanais com diário, recuperação e disponibilidade: [EVOLUCAO.md](EVOLUCAO.md). Os tetos são calculados no servidor e validados após a resposta; sentir-se bem não aumenta automaticamente a carga.
+
+Tipos e etapas dos treinos, com elegibilidade definida no servidor: [INTENSIDADE.md](INTENSIDADE.md). O limite global legado de RPE 4–5 foi substituído por política por perfil para sessões estruturadas; limites de volume e recuperação continuam ativos.

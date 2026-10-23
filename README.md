@@ -57,3 +57,5 @@ Personalização de Hoje, Objetivo e Guia: [PERSONALIZACAO.md](PERSONALIZACAO.md
 Geração assíncrona com andamento e resultado recuperável: [FILA-IA.md](FILA-IA.md). É possível fechar o PWA após a confirmação de que a solicitação foi salva.
 
 Evolução ao longo da preparação: [EVOLUCAO.md](EVOLUCAO.md). Na seção Plano, feche a semana com recuperação e disponibilidade. Com autorização, o Gemini revisa o próximo bloco após encerrar a semana, usando o diário sincronizado e a mesma fila/limites de custo.
+
+Treinos específicos conforme base e recuperação: [INTENSIDADE.md](INTENSIDADE.md). Novos campos do cadastro orientam a elegibilidade para fartlek, ritmo e intervalados; novas sessões incluem etapas verificadas e exportação fiel. Atualize o PWA e revise o cadastro para usar esses dados.

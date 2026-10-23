@@ -1,3 +1,4 @@
+import {validateIntensity,intensityPolicy,validateWorkout,validateWorkoutSchedule,validateReviewQuality} from './workout-contract.js';
 export function dateOnly(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('Data inválida.');
   const d = new Date(value + 'T12:00:00Z');
@@ -36,8 +37,8 @@ function validateReviewLimits(raw){
  if(!raw||typeof raw!=='object'||typeof raw.sourcePlanId!=='string'||!/^ai-[a-z0-9-]{1,100}$/.test(raw.sourcePlanId)||!['increase','hold','reduce'].includes(raw.decision)||typeof raw.reason!=='string'||!raw.reason||raw.reason.length>500)throw new Error('Referência da revisão inválida.');
  const weekStart=dateOnly(raw.weekStart),weekEnd=dateOnly(raw.weekEnd);if(daysBetween(weekStart,weekEnd)!==6)throw new Error('Semana de revisão inválida.');
  const out={sourcePlanId:raw.sourcePlanId,weekStart,weekEnd,decision:raw.decision,reason:raw.reason};
- for(const [name,max]of Object.entries({maxWeeklyKm:200,maxWeeklyMinutes:3600,maxSessionKm:150,maxSessionMinutes:600,maxRpe:5,maxLoad:36000,observedKm:15000,observedMinutes:144000}))out[name]=finite(raw[name],0,max,'os limites da revisão');
- if(!Number.isInteger(out.maxRpe)||out.maxRpe<1)throw new Error('Esforço de revisão inválido.');return out;
+ for(const [name,max]of Object.entries({maxWeeklyKm:200,maxWeeklyMinutes:3600,maxSessionKm:150,maxSessionMinutes:600,maxRpe:6,maxLoad:36000,observedKm:15000,observedMinutes:144000}))out[name]=finite(raw[name],0,max,'os limites da revisão');
+ if(!Number.isInteger(out.maxRpe)||out.maxRpe<1)throw new Error('Esforço de revisão inválido.');if(raw.quality!==undefined)out.quality=validateReviewQuality(raw.quality);return out;
 }
 function validateDetails(raw,days,goal){
  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('Confira as informações adicionais.');
@@ -47,10 +48,11 @@ function validateDetails(raw,days,goal){
  const longDay=optionalNumber(raw.longDay,0,6,'o dia do longo',true);if(longDay!==null&&!days.includes(longDay))throw new Error('O dia do longo precisa estar entre seus dias disponíveis.');
  const finishMinutes=optionalNumber(raw.finishMinutes,5,3000,'o tempo desejado de conclusão');if(finishMinutes!==null&&goal!=='distance')throw new Error('O tempo desejado de conclusão se aplica à meta de distância.');
  if(raw.registrationCompleted!==undefined&&typeof raw.registrationCompleted!=='boolean')throw new Error('Estado do cadastro inválido.');
- return {registrationCompleted:raw.registrationCompleted===true,eventName:eventName.trim(),terrain:choice(raw.terrain,['unspecified','road','trail','mixed','treadmill'],'o terreno'),elevationM:optionalNumber(raw.elevationM,0,20000,'o desnível positivo'),experience:choice(raw.experience,['unspecified','beginner','returning','regular','experienced'],'sua experiência'),experienceMonths:optionalNumber(raw.experienceMonths,0,600,'os meses de experiência',true),recentRuns:optionalNumber(raw.recentRuns,0,7,'os dias recentes de corrida',true),longDay,finishMinutes};
+ return {...(raw.intensity!==undefined?{intensity:validateIntensity(raw.intensity)}:{}),registrationCompleted:raw.registrationCompleted===true,eventName:eventName.trim(),terrain:choice(raw.terrain,['unspecified','road','trail','mixed','treadmill'],'o terreno'),elevationM:optionalNumber(raw.elevationM,0,20000,'o desnível positivo'),experience:choice(raw.experience,['unspecified','beginner','returning','regular','experienced'],'sua experiência'),experienceMonths:optionalNumber(raw.experienceMonths,0,600,'os meses de experiência',true),recentRuns:optionalNumber(raw.recentRuns,0,7,'os dias recentes de corrida',true),longDay,finishMinutes};
 }
 const text = (value,max=1500) => { if(typeof value!=='string'||!value.trim()||value.length>max) throw new Error('A sugestão contém texto inválido.');return value; };
-export function validateSuggestion(raw,p) {
+export function validateSuggestion(raw,p,{requireWorkouts=false}={}) {
+  const policy=intensityPolicy(p);
   if(!raw||!Array.isArray(raw.phases)||!Array.isArray(raw.weeks)||!Array.isArray(raw.warnings)) throw new Error('O Gemini não retornou um plano válido.');
   const detailedDays=Math.min(28,p.preparationDays), count=Math.ceil(detailedDays/7);
   if(raw.weeks.length!==count||raw.phases.length<1||raw.phases.length>12||raw.warnings.length>12) throw new Error('O período retornado está incompleto.');
@@ -73,7 +75,10 @@ export function validateSuggestion(raw,p) {
       const rpe=finite(s.rpe,1,10,'o esforço sugerido');
       if(!Number.isInteger(rpe)) throw new Error('Esforço inválido.');
       if(p.weeklyKm<20&&rpe>4) throw new Error('A sugestão contém esforço incompatível com a base recente.');
-      total+=km;return {date,km,minutes,rpe,long:s.long,title:text(s.title,120),instructions:text(s.instructions)};
+      const session={date,km,minutes,rpe,long:s.long,title:text(s.title,120),instructions:text(s.instructions)};
+      if(requireWorkouts&&s.workout===undefined)throw new Error('Faltam os tipos e as etapas dos treinos.');
+      if(s.workout!==undefined)session.workout=validateWorkout(s.workout,session,policy);
+      total+=km;return session;
     });
     if(sessions.filter(s=>s.long).length>1) throw new Error('Mais de um longo na mesma semana.');
     if(Math.abs(finite(w.totalKm,0,300,'o total semanal')-total)>.15) throw new Error('O total semanal não corresponde às sessões.');
@@ -83,6 +88,7 @@ export function validateSuggestion(raw,p) {
     if(p.review&&(sessions.some(s=>s.minutes>p.review.maxSessionMinutes+.05||s.rpe>p.review.maxRpe)||sessions.reduce((n,s)=>n+s.minutes,0)>p.review.maxWeeklyMinutes+.05||sessions.reduce((n,s)=>n+s.minutes*s.rpe,0)>p.review.maxLoad+.05))throw new Error('A sugestão excede os limites de recuperação da revisão semanal.');
     return {start,totalKm:Math.round(total*10)/10,focus:text(w.focus),sessions:sessions.sort((a,b)=>a.date.localeCompare(b.date))};
   });
+  validateWorkoutSchedule(weeks,p,policy);
   return {summary:text(raw.summary),feasibility:text(raw.feasibility),phases,weeks,warnings:raw.warnings.map(x=>text(x)),reviewDate:addDate(p.startDate,detailedDays)};
 }
 const str={type:'string'};

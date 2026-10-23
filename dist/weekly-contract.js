@@ -1,3 +1,4 @@
+import {intensityPolicy,qualityTypes,workoutStats} from './workout-contract.js';
 import {validateProfile,dateOnly,addDate,daysBetween,localToday} from './training-contract.js';
 export function validateWeeklyCheckin(raw){
  if(!raw||typeof raw!=='object')throw Error('Preencha o fechamento da semana.');
@@ -44,9 +45,24 @@ export function prepareWeeklyReview(context,today=localToday()){
   maxWeeklyMinutes:floor(Math.min(3600,minutes*factor,plannedMinutes>0?plannedMinutes*(good?1.05:1):minutes*factor)),
   maxSessionKm:floor(Math.min(150,longest*(good?1.05:1))),maxSessionMinutes:floor(Math.min(600,duration*(good?1.05:1))),
   maxRpe:good&&km>=20?5:4,maxLoad:floor(Math.min(36000,load*factor)),observedKm:floor(km),observedMinutes:floor(minutes)};
- const original=context.profile;
+ const original=context.currentIntensity?{...context.profile,details:{...context.profile.details,intensity:context.currentIntensity}}:context.profile;
+ // A weekly review can preserve quality already practiced; it cannot introduce a new peak while raising volume.
+ if(original.details?.intensity){
+  const updated={...original,weeklyKm:Math.min(200,km),preparationDays:daysBetween(today,original.targetDate),details:{...original.details,intensity:{...original.details.intensity,fatigue:c.fatigue,sleep:c.sleep}}};
+  const candidate=intensityPolicy({...updated,review:undefined});
+  const actualIds=new Set(week.map(x=>x.id));
+  const practiced=planned.filter(x=>actualIds.has(x.id)&&x.workout&&qualityTypes.includes(x.workout.type)&&week.some(log=>log.id===x.id&&log.minutes>=Number(x.minutes)*.95&&log.rpe>=4&&(Number(x.km)===0||log.km>=Number(x.km)*.9)));
+  const previousHasQuality=previous.some(x=>Number(x.rpe)>=4);
+  if(!reduce&&previousGood&&c.complete&&candidate.maxQuality&&practiced.length&&previousHasQuality){
+   const peak=Math.max(...practiced.map(x=>workoutStats(x.workout).peak));
+   const dose=Math.max(...practiced.map(x=>workoutStats(x.workout).hardMinutes));
+   review.quality={allowedTypes:candidate.allowedTypes.filter(x=>qualityTypes.includes(x)&&peak>=({fartlek:5,tempo:6,interval:7}[x])),maxPeakRpe:Math.min(candidate.maxPeakRpe,peak),maxHardMinutes:Math.min(candidate.maxHardMinutes,dose)};
+   review.maxRpe=Math.min(candidate.maxOverallRpe,Math.max(...week.map(x=>x.rpe)));
+  }
+ }
+
  const profile=validateProfile({...original,startDate:today,weeklyKm:Math.min(200,km),longestKm:longest,days:c.days,maxMinutes:c.maxMinutes,longMinutes:c.longMinutes,consent:true,
-  ...(original.details?{details:{...original.details,longDay:c.days.includes(original.details.longDay)?original.details.longDay:null}}:{}),review},today,{allowReview:true});
+  ...(original.details?{details:{...original.details,...(original.details.intensity?{intensity:{...original.details.intensity,fatigue:c.fatigue,sleep:c.sleep}}:{}),longDay:c.days.includes(original.details.longDay)?original.details.longDay:null}}:{}),review},today,{allowReview:true});
  const existingPhases=Array.isArray(context.existingPhases)?context.existingPhases.slice(0,12).map(x=>({start:x.start,end:x.end,title:String(x.title||'').slice(0,100),focus:String(x.focus||'').slice(0,500)})):[];
  const upcoming=Array.isArray(context.upcoming)?context.upcoming.slice(0,28).map(x=>({date:x.date,title:String(x.title||'').slice(0,120),km:Number(x.km),minutes:Number(x.minutes),rpe:Number(x.rpe),long:x.long===true})):[];
  const evidence={existingPhases,upcoming,weekStart:start,weekEnd:end,checkin:c,planned:planned.map(({id,...x})=>x),performed:logs.map(({id,...x})=>x),completion,plannedKm,plannedMinutes,performedKm:km,performedMinutes:minutes,perceivedLoad:load,limits:review};

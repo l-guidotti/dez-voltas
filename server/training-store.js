@@ -9,7 +9,7 @@ export async function trainingStore({request,env,user,access,readBody,fail}){
  }
  async function read(cursor){
   for(let attempt=0;attempt<2;attempt++){
-   const remote=await rest('rpc/read_training_store',{since_cursor:cursor});if(remote.initialized)return remote;
+   const remote=await rest('rpc/read_training_store',{since_cursor:cursor});if(remote.initialized){if(request.headers.get('x-dv-training-format')!=='2'&&remote.rows.some(row=>row.kind==='sessions'&&row.data?.workout))throw fail(426,'Atualize o PWA para sincronizar treinos com etapas. As cópias foram preservadas.');return remote;}
    const legacy=(await rest('account_data?user_id=eq.'+encodeURIComponent(user.id)+'&select=revision,document'))[0];
    const empty={version:1,profile:null,draft:null,archive:{version:1,owner:user.id,plans:[]},state:{version:1,logs:{},checklist:{},timer:null}};
    let rows;try{rows=[...documentRows(validateAccountDocument(legacy?.document||empty,user.id),user.id).values()].map(row=>({...row,revision:0}));}catch{throw fail(502,'Não foi possível migrar os dados antigos. A cópia original foi preservada.');}

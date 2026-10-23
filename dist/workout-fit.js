@@ -1,3 +1,4 @@
+import {workoutTypes,workoutStats} from './workout-contract.js';
 // Original, dependency-free encoder for the documented FIT Workout file format.
 // https://developer.garmin.com/fit/articles/file-types/workout.html
 // All targets are OPEN: this export adds no pace, heart-rate or power prescription.
@@ -12,8 +13,16 @@ function record(local,global,fields){const definition=join(Uint8Array.of(0x40|lo
 export function fitCRC(bytes){let crc=0;for(const byte of bytes){crc^=byte;for(let i=0;i<8;i++)crc=(crc&1)?(crc>>>1)^0xA001:crc>>>1;}return crc;}
 function serial(text){let h=2166136261;for(const c of text){h^=c.charCodeAt(0);h=Math.imul(h,16777619);}return (h>>>0)||1;}
 export function workoutRecipe(session,{warmupMinutes=5,cooldownMinutes=5}={}){
- if(!session||!/^\d{4}-\d{2}-\d{2}$/.test(session.date)||!Number.isFinite(session.km)||session.km<=0||session.km>150)throw new Error('Sessão inválida para exportação.');
+ if(!session||!/^\d{4}-\d{2}-\d{2}$/.test(session.date)||!Number.isFinite(session.km)||(session.km<0||session.km===0&&!session.workout)||session.km>150)throw new Error('Sessão inválida para exportação.');
  for(const minutes of [warmupMinutes,cooldownMinutes])if(!Number.isInteger(minutes)||minutes<0||minutes>15)throw new Error('Use de 0 a 15 minutos inteiros para aquecer e desacelerar.');
+ if(session.workout){
+  const w=session.workout,stats=workoutStats(w);if(!Array.isArray(w.blocks)||w.blocks.length>8||Math.abs(stats.minutes-session.minutes)>.15)throw Error('Etapas inválidas para exportação.');
+  const steps=[];for(const b of w.blocks)for(let n=0;n<b.repeats;n++){
+   steps.push({name:b.phase==='warmup'?'Aquecimento':b.phase==='cooldown'?'Desaquecimento':workoutTypes[w.type],durationType:0,value:Math.round(b.minutes*60000),intensity:b.phase==='warmup'?2:b.phase==='cooldown'?3:0,notes:`RPE ${b.rpe}/10. ${b.phase==='work'?w.purpose:'Trote ou caminhada confortável.'}`});
+   if(b.recoveryMinutes)steps.push({name:'Recuperação',durationType:0,value:Math.round(b.recoveryMinutes*60000),intensity:4,notes:`Trote ou caminhada em RPE ${b.recoveryRpe}/10.`});
+  }
+  return {name:`DV ${workoutTypes[w.type]} ${session.date}`,date:session.date,km:session.km,warmupMinutes:w.blocks[0].minutes,cooldownMinutes:w.blocks.at(-1).minutes,steps,structured:true};
+ }
  const steps=[];
  if(warmupMinutes)steps.push({name:'Aquecimento',durationType:0,value:warmupMinutes*60000,intensity:2,notes:'Caminhar ou trotar muito leve. Sem meta de ritmo.'});
  steps.push({name:'Corrida leve',durationType:1,value:Math.round(session.km*100000),intensity:0,notes:'Converse em frases completas. Caminhe se precisar.'});
@@ -21,7 +30,7 @@ export function workoutRecipe(session,{warmupMinutes=5,cooldownMinutes=5}={}){
  const name=`DV S${String(session.week).padStart(2,'0')} ${session.date.slice(8,10)}-${session.date.slice(5,7)} ${session.km}km`;
  return {name,date:session.date,km:session.km,warmupMinutes,cooldownMinutes,steps};
 }
-export function workoutInstructions(session,options){const r=workoutRecipe(session,options);return [`DEZ VOLTAS — ${r.name}`,`Data planejada: ${r.date.split('-').reverse().join('/')}`,`Nome sugerido do modelo: DV Leve ${r.km}km`,`Modalidade: corrida ao ar livre`,...r.steps.map((s,i)=>`${i+1}. ${s.name}: ${s.durationType===0?s.value/60000+' min':r.km+' km'}. ${s.notes}`),'Esforço livre e confortável; sem meta fixa de ritmo, frequência cardíaca ou potência.','A distância do plano corresponde à etapa principal; aquecimento e desaquecimento também somam carga.'].join('\n');}
+export function workoutInstructions(session,options){const r=workoutRecipe(session,options);return [`DEZ VOLTAS — ${r.name}`,`Data planejada: ${r.date.split('-').reverse().join('/')}`,`Nome sugerido do modelo: ${r.structured?r.name:'DV Leve '+r.km+'km'}`,`Modalidade: corrida ao ar livre`,...r.steps.map((s,i)=>`${i+1}. ${s.name}: ${s.durationType===0?s.value/60000+' min':r.km+' km'}. ${s.notes}`),r.structured?'Siga o RPE de cada etapa; sem alvo fixo de ritmo, frequência cardíaca ou potência.':'Esforço livre e confortável; sem meta fixa de ritmo, frequência cardíaca ou potência.',r.structured?'A duração inclui aquecimento, repetições, recuperações e desaquecimento.':'A distância do plano corresponde à etapa principal; aquecimento e desaquecimento também somam carga.'].join('\n');}
 export function exportWorkoutFit(session,options={}){
  const recipe=workoutRecipe(session,options);
  const createdAt=options.createdAt||new Date();const created=Math.floor((createdAt.getTime()-FIT_EPOCH)/1000);
