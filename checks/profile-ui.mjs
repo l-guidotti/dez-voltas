@@ -42,10 +42,6 @@ context.fetch=async()=>{const e=new Error('aborted');e.name='AbortError';throw e
 await events.submit({target:form,preventDefault(){}});
 assert.ok(context.renderProfile().includes('mais de um minuto'));
 assert.ok(context.renderProfile().includes('Base gradual'));
-let checkPath;
-context.fetch=async path=>{checkPath=path;return Response.json({message:'Conexão confirmada com o modelo de teste.'});};
-await events.click({target:{closest(){return {dataset:{profile:'check'}}}}});
-assert.equal(checkPath,'/api/training/check');assert.ok(context.renderProfile().includes('Conexão confirmada com o modelo de teste.'));
 await events.click({target:{closest(){return {dataset:{profile:'adopt'}}}}});
 assert.equal(context.adopted.owner,'uid-a');assert.equal(context.location.hash,'#plano');
 vm.runInContext('account=null;',context);

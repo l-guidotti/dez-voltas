@@ -43,7 +43,7 @@ const caches={async open(key){if(!cacheMap.has(key))cacheMap.set(key,new Map());
 const sw=vm.createContext({self:{location:{origin:'https://app.example'},addEventListener:(n,fn)=>handlers[n]=fn,skipWaiting:async()=>{},clients:{claim:async()=>{}}},caches,URL,Response,Request:class{constructor(path){this.url='https://app.example'+path;}},fetch:async req=>{if(offline)throw new Error('offline');return responseFile(new URL(req.url).pathname)}});
 vm.runInContext(fs.readFileSync('dist/sw.js','utf8'),sw);let pending;
 handlers.install({waitUntil:p=>pending=p});await pending;
-assert.equal(cacheMap.get('dez-voltas-v22').size,23);
+assert.equal(cacheMap.get('dez-voltas-v23').size,23);
 handlers.activate({waitUntil:p=>pending=p});await pending;
 offline=true;let result;
 handlers.fetch({request:{method:'GET',mode:'navigate',url:'https://app.example/'},respondWith:p=>result=p});const fallback=await result;assert.ok((await fallback.text()).includes('<!doctype html>'));
