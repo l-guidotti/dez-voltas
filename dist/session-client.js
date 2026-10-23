@@ -4,7 +4,7 @@ const channel=typeof BroadcastChannel==='function'?new BroadcastChannel('dez-vol
 const sessionError=(message,status)=>Object.assign(new Error(message),{status});
 function notify(name,detail){window.dispatchEvent(new CustomEvent(name,{detail}));}
 function schedule(){clearTimeout(timer);if(paused||!last?.session?.canRefresh)return;const remaining=last.session.expiresAt-Date.now()-120000;timer=setTimeout(()=>renewSession().catch(()=>{if(!paused)timer=setTimeout(()=>renewSession().catch(()=>{}),60000);}),Number.isFinite(remaining)?Math.max(30000,Math.min(remaining,3600000)):1800000);}
-function observe(data){if(!data?.user)return;const previous=last?.user?.id;last=data;paused=false;schedule();if(previous&&previous!==data.user.id)notify('session-account-change',data.user);}
+function observe(data){if(!data?.user)return;const previous=last?.user?.id;last=data;paused=false;schedule();if(previous&&previous!==data.user.id)notify('session-account-change',data.user);else if(!previous)notify('session-restored',data.user);}
 function lock(fn){if(typeof navigator!=='undefined'&&navigator.locks?.request)return navigator.locks.request('dez-voltas-session',fn);const task=queue.then(fn,fn);queue=task.catch(()=>{});return task;}
 async function raw(path,options={}){return fetch(path,{credentials:'same-origin',signal:AbortSignal.timeout(20000),...options});}
 export async function renewSession(){
@@ -29,7 +29,7 @@ async function logout(path,options){
 export async function sessionFetch(path,options={}){
  const pathname=new URL(path,location.origin||location.href).pathname;
  if(pathname==='/api/auth/logout')return logout(path,options);
- let response=await raw(path,options);
+ const turn=generation;let response=await raw(path,options);if(turn!==generation)throw sessionError('A sessão foi encerrada.',401);
  const protectedRoute=pathname==='/api/auth/me'||!pathname.startsWith('/api/auth/');
  let metadata=null;
  if(response.ok&&['/api/auth/me','/api/auth/callback'].includes(pathname)){metadata=await response.clone().json();observe(metadata);if(pathname.endsWith('/callback'))channel?.postMessage({type:'session-changed'});}
@@ -45,5 +45,5 @@ window.addEventListener('online',resume);window.addEventListener('focus',resume)
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)resume();});
 if(channel)channel.onmessage=event=>{
  if(event.data?.type==='signed-out'){generation++;paused=true;last=null;clearTimeout(timer);notify('session-ended');}
- if(event.data?.type==='session-changed')void raw('/api/auth/me').then(async r=>{if(r.ok)observe(await r.json());}).catch(()=>{});
+ if(event.data?.type==='session-changed'){const turn=generation;void raw('/api/auth/me').then(async r=>{if(r.ok){const data=await r.json();if(turn===generation)observe(data);}}).catch(()=>{});}
 };

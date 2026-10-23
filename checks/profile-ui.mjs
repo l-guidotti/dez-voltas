@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate} from '../dist/training-contract.js';
-const events={},storage=new Map();
-const context=vm.createContext({sessionFetch:(...args)=>context.fetch(...args),configureAccountSync(){},connectAccount:async()=>{},accountChanged(){},syncMessage:()=>'Sincronizado',hasSyncConflict:()=>false,synchronize:async()=>{},resolveSync:async()=>{},replaceOwnerArchive(){},adoptSuggestion:(owner,result)=>{context.adopted={owner,result}},setPlanOwner(){},getActivePlan:()=>null,validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate,Intl,Date,URL,URLSearchParams,Blob,setTimeout,clearTimeout,AbortController,Event,requestAnimationFrame:fn=>fn(),document:{addEventListener:(type,callback)=>events[type]=callback,querySelector:()=>null},window:{addEventListener(){},dispatchEvent(){}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},fetch:async()=>{throw Error('offline')},location:{href:'https://example.com/#perfil'},history:{replaceState(){}}});
+const events={},windowEvents={},storage=new Map();
+const context=vm.createContext({sessionFetch:(...args)=>context.fetch(...args),configureAccountSync(){},activeSyncOwner:()=>'new-runner',connectAccount:async()=>{},accountChanged(){},syncMessage:()=>'Sincronizado',hasSyncConflict:()=>false,synchronize:async()=>{},resolveSync:async()=>{},replaceOwnerArchive(){},adoptSuggestion:(owner,result)=>{context.adopted={owner,result}},setPlanOwner(){},getActivePlan:()=>null,validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate,Intl,Date,URL,URLSearchParams,Blob,setTimeout,clearTimeout,AbortController,Event,requestAnimationFrame:fn=>fn(),document:{addEventListener:(type,callback)=>events[type]=callback,querySelector:()=>null},window:{addEventListener:(name,fn)=>windowEvents[name]=fn,dispatchEvent(){}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},fetch:async()=>{throw Error('offline')},location:{href:'https://example.com/#perfil'},history:{replaceState(){}}});
 vm.runInContext(fs.readFileSync('dist/profile.js','utf8').replace(/^import .*;\n/gm,'').replace(/export /g,''),context);
 let html=context.renderProfile();assert.ok(html.includes('Receber link de acesso'));assert.ok(!html.includes('id="profile-goal"'));assert.ok(html.includes('primeiro acesso'));
 vm.runInContext(`account={id:'uid-a',email:'<script>@example.com'}; authChecked=true;`,context);
@@ -65,3 +65,6 @@ let logoutPath;context.fetch=async path=>{logoutPath=path;return Response.json({
 await events.click({target:{closest(){return {dataset:{profile:'logout'}}}}});
 assert.equal(logoutPath,'/api/auth/logout');assert.equal(context.location.hash,'#perfil');assert.ok(context.renderAccountActions().includes('Entrar'));assert.ok(!context.renderAccountActions().includes('data-profile="logout"'));assert.ok(context.renderProfile().includes('Entrar com Google'));
 console.log('PASS: ações da conta no cabeçalho, logout chama API e retorna ao login; estado desconectado sem botão de saída.');
+
+await windowEvents['session-restored']({detail:{id:'new-runner',email:'new@example.com'}});assert.ok(context.renderAccountActions().includes('Minha conta'));assert.ok(context.renderProfile().includes('Acesso restabelecido automaticamente'));
+console.log('PASS: conta é restaurada na interface ao recuperar a conexão, preservando a sincronização em andamento.');

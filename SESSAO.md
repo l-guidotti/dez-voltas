@@ -10,7 +10,7 @@ Uma promessa compartilhada evita renovações simultâneas na mesma aba. Web Loc
 
 A saída usa o mesmo bloqueio da renovação, cancela o agendamento, revoga a sessão local no Supabase quando possível e remove os cookies. Se o serviço remoto não responder, os cookies ainda são removidos, mas a revogação remota não é garantida. Sair neste navegador não encerra intencionalmente sessões de outros dispositivos. A API compara `x-account-id` com o usuário verificado antes de processar sincronização ou geração, impedindo que uma aba antiga grave na conta recém-aberta em outra aba.
 
-**Migração:** sessões anteriores não conservaram o refresh token. Depois de atualizar para cache v13, saia e entre uma vez para ativar a renovação. Isso não remove o perfil, planos nem a fila de treinos.
+**Migração:** sessões anteriores não conservaram o refresh token. Depois de atualizar para cache v14, saia e entre uma vez para ativar a renovação. Isso não remove o perfil, planos nem a fila de treinos.
 
 `npm test` cobre cookies/rotação, metadados sem tokens, origem, erro temporário, revogação, sessão sem acesso mas com refresh, saída, chamadas simultâneas, coordenação de abas, renovação agendada, offline, repetição limitada e saída concorrente com renovação. Os provedores são simulados; a manutenção real de uma sessão ao longo de uma hora e o comportamento Safari/PWA devem ser conferidos no dispositivo após uma nova entrada.
 

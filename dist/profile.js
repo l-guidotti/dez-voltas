@@ -1,5 +1,5 @@
 import {sessionFetch} from './session-client.js';
-import {connectAccount,accountChanged,syncMessage,hasSyncConflict,synchronize,resolveSync} from './account-sync.js';
+import {connectAccount,activeSyncOwner,accountChanged,syncMessage,hasSyncConflict,synchronize,resolveSync} from './account-sync.js';
 import {adoptSuggestion,setPlanOwner,getActivePlan} from './active-plan.js';
 import {validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate} from './training-contract.js';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -58,3 +58,5 @@ async function clearAccountSession(message){account=null;registering=false;resul
 window.addEventListener('session-ended',()=>{void clearAccountSession('Você saiu da conta em outra aba.');});
 window.addEventListener('session-expired',()=>{void clearAccountSession('Sua sessão terminou. Entre novamente; os dados locais foram preservados.');});
 window.addEventListener('session-account-change',async event=>{account=event.detail;setPlanOwner(account.id);await connectAccount(account.id);load();location.hash='#perfil';status='A conta ativa foi alterada em outra aba.';changed();});
+
+window.addEventListener('session-restored',async event=>{if(account||!authChecked)return;account=event.detail;setPlanOwner(account.id);if(activeSyncOwner()!==account.id)await connectAccount(account.id);load();status='Acesso restabelecido automaticamente. Seus dados continuam salvos.';changed();});

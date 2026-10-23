@@ -34,7 +34,7 @@ npx wrangler@4 pages deploy dist --project-name dez-voltas --branch main
 
 Configure os bindings/segredos no painel antes e confirme a proteção de acesso. O projeto continua contendo o plano pessoal original; preserve a restrição Cloudflare Access enquanto ele estiver no pacote. A autenticação de novas contas não torna automaticamente adequado publicar os dados pessoais desse plano. Uma futura versão multiusuário deve tornar a experiência inicial genérica e isolar perfis no banco por usuário.
 
-O service worker não intercepta `/api/`; respostas de autenticação e sugestões usam `Cache-Control: no-store`. O cache da PWA foi atualizado para v13. O token de acesso tem duração curta; o servidor conserva o refresh token em cookie protegido e a PWA renova a sessão automaticamente. Consulte SESSAO.md para concorrência, saída e migração das sessões antigas. No iPhone, abra o link no navegador que iniciou o acesso; Safari/PWA podem não compartilhar cookies. Se o link abrir em outro contexto, peça outro no Safari e continue nele.
+O service worker não intercepta `/api/`; respostas de autenticação e sugestões usam `Cache-Control: no-store`. O cache da PWA foi atualizado para v14. O token de acesso tem duração curta; o servidor conserva o refresh token em cookie protegido e a PWA renova a sessão automaticamente. Consulte SESSAO.md para concorrência, saída e migração das sessões antigas. No iPhone, abra o link no navegador que iniciou o acesso; Safari/PWA podem não compartilhar cookies. Se o link abrir em outro contexto, peça outro no Safari e continue nele.
 
 ## Validação e limites da entrega
 

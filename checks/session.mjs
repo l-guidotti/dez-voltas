@@ -34,7 +34,7 @@ const fetcher=async(path,options)=>{assert.equal(options.credentials,'same-origi
  if(path==='/api/auth/refresh'){refreshes++;if(networkDown)throw Error('offline');fresh=true;return Response.json({user,session:{expiresAt:Date.now()+3600000,canRefresh:true}});}
  attempts++;return fresh&&!alwaysReject?Response.json({ok:true}):Response.json({error:'expired'},{status:401});
 };
-const one=browser(fetcher);const results=await Promise.all([one.context.sessionFetch('/api/account/sync'),one.context.sessionFetch('/api/training/check',{method:'POST',body:'{}'})]);assert.ok(results.every(r=>r.ok));assert.equal(refreshes,1);assert.equal(attempts,4);
+const one=browser(fetcher);const results=await Promise.all([one.context.sessionFetch('/api/account/sync'),one.context.sessionFetch('/api/training/check',{method:'POST',body:'{}'})]);assert.ok(results.every(r=>r.ok));assert.equal(refreshes,1);assert.equal(attempts,4);assert.ok(one.events.some(e=>e.type==='session-restored'));
 fresh=false;refreshes=0;const lock={tail:Promise.resolve()},two=browser(fetcher,lock),three=browser(fetcher,lock);await Promise.all([two.context.sessionFetch('/api/account/sync'),three.context.sessionFetch('/api/account/sync')]);assert.equal(refreshes,1);
 fresh=false;networkDown=true;const offline=browser(fetcher);await assert.rejects(()=>offline.context.sessionFetch('/api/account/sync'));assert.ok(!offline.events.some(e=>e.type==='session-expired'));networkDown=false;
 fresh=false;alwaysReject=true;attempts=0;const noLoop=browser(fetcher);assert.equal((await noLoop.context.sessionFetch('/api/account/sync')).status,401);assert.equal(attempts,2);alwaysReject=false;

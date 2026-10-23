@@ -5,6 +5,7 @@ let adapter,owner=null,epoch=0,cursor=0,base=new Map(),conflicts=new Set(),legac
 const key=id=>'dez-voltas-cloud-v2:'+id;
 const clone=x=>JSON.parse(JSON.stringify(x));
 export function configureAccountSync(value){adapter=value;}
+export function activeSyncOwner(){return owner;}
 export function syncMessage(){return message;}
 export function hasSyncConflict(){return conflicts.size>0;}
 function report(text){message=text;window.dispatchEvent(new Event('sync-status'));}
