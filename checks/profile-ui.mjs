@@ -127,3 +127,9 @@ assert.ok(context.renderProfile().includes('value="Minha meia"'));
 storage.set('dez-voltas-profile-edit-v1:partial-a',JSON.stringify({version:1,profile:{days:'invalid'}}));
 vm.runInContext('load();',context);assert.equal(context.needsRegistration(),false);
 console.log('PASS: cadastro incompleto preservado durante sincronização, recarga e mudança de objetivo/dias; isolamento por conta, conclusão e rascunho inválido.');
+
+// Terminal errors are also shown beside the generate button, not just above the long form.
+context.fetch=async()=>Response.json({job:{id:'failed-test',status:'failed',attempts:1,error:'Formato rejeitado pelo provedor.'},history:[]});
+await context.refreshJobs(true);html=context.renderProfile();
+assert.ok(html.lastIndexOf('Formato rejeitado pelo provedor.')>html.indexOf('Gerar sugestão com Gemini'));
+console.log('PASS: falha da fila aparece também junto ao botão de geração.');

@@ -20,15 +20,15 @@ assert.throws(()=>attachPhaseDates({phases:[]},p),/todas as/);
 for(let dayOffset=0;dayOffset<7;dayOffset++)for(const length of [14,15,20,28,29]){
  const startDate=addDate('2026-12-28',dayOffset),profile={...p,startDate,targetDate:addDate(startDate,length),preparationDays:length,days:[0,2,3,5]};
  const slots=trainingCalendar(profile),schema=schemaForCalendar(profile),count=Math.ceil(Math.min(length,28)/7);
- assert.equal(slots.length,count);assert.equal(schema.properties.weeks.prefixItems.length,count);
+ assert.equal(slots.length,count);assert.equal(schema.properties.weeks.minItems,count);
  for(const [i,slot] of slots.entries()){
-  assert.equal(slot.start,addDate(startDate,i*7));assert.equal(schema.properties.weeks.prefixItems[i].properties.start.enum[0],slot.start);
-  assert.equal(schema.properties.weeks.prefixItems[i].properties.sessions.maxItems,slot.availableDates.length);
+  assert.equal(slot.start,addDate(startDate,i*7));assert.equal(slot.maxSessions,slot.availableDates.length);
+  assert.equal(schema.properties.weeks.maxItems,count);
   for(const date of slot.availableDates){assert.ok(date>=slot.start&&date<=slot.end&&date<profile.targetDate);assert.ok(profile.days.includes(new Date(date+'T12:00:00Z').getUTCDay()));}
  }
 }
 const partial={...p,startDate:'2026-10-22',targetDate:'2026-11-06',preparationDays:15,days:[0,2]};
-assert.equal(trainingCalendar(partial).at(-1).maxSessions,0);assert.equal(schemaForCalendar(partial).properties.weeks.prefixItems.at(-1).properties.sessions.maxItems,0);
+assert.equal(trainingCalendar(partial).at(-1).maxSessions,0);assert.equal(schemaForCalendar(partial).properties.weeks.maxItems,3);
 for(const patch of [{consent:false},{days:[2,2]},{targetDate:start},{startDate:'2026-02-30'},{weeklyKm:NaN},{longestKm:-1},{days:[9]},{weeksConsistent:1.5}])assert.throws(()=>validateProfile({...raw,...patch}));
 function sample(){return {summary:'Preparação gradual.',feasibility:'Meta a revisar pela recuperação.',warnings:['Ajuste se houver fadiga.'],phases:[{start,end:p.targetDate,title:'Preparação',focus:'Base, especificidade, recuperação e polimento.'}],weeks:Array.from({length:4},(_,i)=>{const from=addDate(start,i*7);const day=Array.from({length:7},(_,n)=>addDate(from,n)).find(d=>p.days.includes(new Date(d+'T12:00:00Z').getUTCDay()));return {start:from,totalKm:5,focus:'Corrida confortável.',sessions:[{date:day,title:'Rodagem',km:5,minutes:35,rpe:3,long:false,instructions:'Conversa confortável; caminhe se precisar.'}]};})};}
 function modelSample(){return {...sample(),phases:phaseCalendar(p).map(()=>({title:'Preparação',focus:'Revisar progressão conforme recuperação.'}))};}
@@ -57,7 +57,7 @@ r=await handleApi(request('auth/callback',{code:'x'},'__Host-dv-pkce='+pkce),env
 const details={registrationCompleted:true,eventName:'Prova local',terrain:'trail',elevationM:450,experience:'returning',experienceMonths:18,recentRuns:2,longDay:null,finishMinutes:null};
 async function generationResponse(profile,env){try{return Response.json((await generateSuggestion(profile,env)).result);}catch(e){return Response.json({error:e.message},{status:e.status||502});}}
 r=await generationResponse(validateProfile({...raw,details,email:'do-not-send@example.com'}),env);assert.equal(r.status,200);assert.equal((await r.json()).plan.weeks.length,4);const call=calls.find(x=>x.url.includes('generateContent'));assert.ok(!call.options.body.includes('@'));assert.equal(call.options.headers['x-goog-api-key'],'secret');
-const payload=JSON.parse(call.options.body),sent=JSON.parse(payload.contents[0].parts[0].text);assert.equal(sent.calendar[0].start,p.startDate);assert.deepEqual(sent.profile.days,p.days);assert.equal(sent.profile.details.terrain,'trail');assert.equal(sent.profile.details.elevationM,450);assert.equal(payload.generationConfig.responseJsonSchema.properties.weeks.prefixItems.length,4);
+const payload=JSON.parse(call.options.body),sent=JSON.parse(payload.contents[0].parts[0].text);assert.equal(sent.calendar[0].start,p.startDate);assert.deepEqual(sent.profile.days,p.days);assert.equal(sent.profile.details.terrain,'trail');assert.equal(sent.profile.details.elevationM,450);assert.equal(payload.generationConfig.responseJsonSchema.properties.weeks.maxItems,4);
 assert.deepEqual(sent.phases,phaseCalendar(p));
 r=await handleApi(request('auth/logout',{}),env);assert.equal(r.status,200);assert.match(r.headers.get('set-cookie'),/Max-Age=0/);
 const otherEnv={...env,AI_USAGE:{async get(){return null},async put(){}}};
@@ -84,3 +84,14 @@ const candidate=sample();const firstSession=candidate.weeks[0].sessions[0];const
 globalThis.fetch=async()=>Response.json(user);
 assert.equal((await handleApi(request('training/suggest',{...raw,details:{...details,registrationCompleted:false}}),otherEnv)).status,409);
 console.log('PASS: novos campos do cadastro, perfil sem consentimento, dia obrigatório do longo e contexto enviado à IA; compatibilidade com perfis anteriores.');
+
+// Guard against the provider grammar explosion: one session/workout definition,
+// only top-level array counts; semantic constraints remain in validateSuggestion.
+const wireSchema=schemaForCalendar(p),wireText=JSON.stringify(wireSchema);
+assert.equal(wireSchema.properties.weeks.prefixItems,undefined);
+assert.equal((wireText.match(/"recoveryMinutes"\s*:/g)||[]).length,1);
+assert.ok(wireText.length<4500);
+const nested=JSON.stringify(wireSchema.properties.weeks.items);
+for(const keyword of ['minimum','maximum','minItems','maxItems','prefixItems'])assert.ok(!nested.includes('"'+keyword+'"'));
+assert.ok(wireSchema.properties.weeks.items.properties.sessions.items.required.includes('workout'));
+console.log('PASS: schema Gemini compacto sem duplicar semanas/etapas nem limites aninhados; validação semântica continua obrigatória.');

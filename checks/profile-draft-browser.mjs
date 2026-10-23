@@ -7,6 +7,7 @@ import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve,extname} from 'node:path';
 const root=resolve('dist'),temp=await mkdtemp(join(tmpdir(),'dez-draft-browser-'));
+let generationJob=null;
 let account={id:'browser-runner-a',email:'a@example.test'},cursor=0,syncs=0,posts=0;
 const rows=new Map(),errors=[],pending=new Map();let chrome,ws,sequence=0;
 const server=createServer(async(req,res)=>{
@@ -16,7 +17,7 @@ const server=createServer(async(req,res)=>{
    res.setHeader('content-type','application/json');
    if(path==='/api/auth/me')return res.end(JSON.stringify({user:account,session:{canRefresh:false}}));
    if(path==='/api/auth/logout'){account=null;return res.end('{}');}
-   if(path==='/api/training/jobs')return res.end(JSON.stringify({job:null,history:[]}));
+   if(path==='/api/training/jobs')return res.end(JSON.stringify({job:generationJob,history:[]}));
    if(path==='/api/account/sync'){
     syncs++;
     if(req.method==='POST'){let body='';for await(const chunk of req)body+=chunk;for(const row of JSON.parse(body).changes){rows.set(row.kind+':'+row.id,{...row,revision:row.revision+1});cursor++;}}
@@ -46,6 +47,11 @@ try{
  await until(()=>evaluate(`document.querySelector('#account-sync-message')?.textContent==='Sincronizado com sua conta.'`));
  await fill('target','21.1');await fill('eventName','Minha meia no celular');
  await evaluate(`window.oldInput=${field('eventName')};oldInput.setSelectionRange(5,5);window.originalScroll=scrollY;`);
+ generationJob={id:'browser-failed-job',status:'failed',attempts:1,error:'Formato de geração rejeitado.'};
+ await evaluate(`(async()=>{window.dispatchEvent(new Event('online'));await new Promise(r=>setTimeout(r,100))})()`);
+ assert.equal(await evaluate(`document.querySelector('#profile-generation-status').textContent`),'Formato de geração rejeitado.');
+ assert.equal(await evaluate('oldInput.isConnected&&document.activeElement===oldInput'),true);
+ generationJob=null;await evaluate('window.originalScroll=scrollY');
  const before=syncs;
  await evaluate(`(async()=>{await (await import('/account-sync.js')).synchronize()})()`);
  assert.ok(syncs>before);assert.equal(await evaluate(`${field('eventName')}.value`),'Minha meia no celular');

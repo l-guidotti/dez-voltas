@@ -35,8 +35,8 @@ const roundtrip=rowsDocument(documentRows(doc,owner),owner);assert.deepEqual(rou
 const recipe=workoutRecipe({...session,id:'test',week:1});assert.equal(recipe.steps.length,10);assert.equal(workoutRecipe({...session,id:'test',week:1,km:0},{warmupMinutes:99}).steps.length,10);assert.equal(recipe.steps.reduce((n,s)=>n+s.value,0),31*60000);assert.ok(workoutInstructions(session).includes('RPE 8/10'));
 const fit=exportWorkoutFit({...session,id:'test',week:1},{createdAt:new Date('2027-01-04T12:00:00Z')});assert.equal(fitCRC(fit.bytes),0);assert.equal(fit.steps.length,10);
 assert.ok(!renderWorkout({...session.workout,purpose:'<script>evil()</script>'}).includes('<script>'));
-const schema=schemaForCalendar(profile);assert.ok(schema.properties.weeks.prefixItems[0].properties.sessions.items.required.includes('workout'));assert.ok(schema.properties.weeks.prefixItems[0].properties.sessions.items.properties.workout.properties.type.enum.includes('interval'));
-const noviceSchema=schemaForCalendar(absent);assert.ok(!noviceSchema.properties.weeks.prefixItems[0].properties.sessions.items.properties.workout.properties.type.enum.includes('interval'));
+const schema=schemaForCalendar(profile);assert.ok(schema.properties.weeks.items.properties.sessions.items.required.includes('workout'));assert.ok(schema.properties.weeks.items.properties.sessions.items.properties.workout.properties.type.enum.includes('interval'));
+const noviceSchema=schemaForCalendar(absent);assert.ok(!noviceSchema.properties.weeks.items.properties.sessions.items.properties.workout.properties.type.enum.includes('interval'));
 assert.equal(checkedSuggestion(result).profile.details.intensity.qualityWeeks,8);
 console.log('PASS: faixas de elegibilidade, base recente, recuperação/restrição/preferência, tipos e etapas, dose/espaçamento, aquecimento, totais, schema específico, arquivo/sincronização e exportação fiel das repetições (FIT CRC).');
 

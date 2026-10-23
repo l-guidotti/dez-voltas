@@ -79,3 +79,9 @@ A interface oferece Google como opção principal, com link de e-mail como alter
 Revisões semanais com diário, recuperação e disponibilidade: [EVOLUCAO.md](EVOLUCAO.md). Os tetos são calculados no servidor e validados após a resposta; sentir-se bem não aumenta automaticamente a carga.
 
 Tipos e etapas dos treinos, com elegibilidade definida no servidor: [INTENSIDADE.md](INTENSIDADE.md). O limite global legado de RPE 4–5 foi substituído por política por perfil para sessões estruturadas; limites de volume e recuperação continuam ativos.
+
+### Formato estruturado compatível com o provedor
+
+O schema enviado ao Gemini usa uma definição compartilhada de semana/sessão/etapas, sem limites numéricos ou de arrays aninhados. Mantém a quantidade exata de semanas/fases, os campos obrigatórios e os tipos de treino permitidos para o perfil. O calendário com datas, dias disponíveis e tetos continua no prompt; todas as restrições são verificadas no servidor antes de guardar um resultado válido. Isso reduz a complexidade da gramática do provedor, que pode rejeitar schemas grandes/nestados com HTTP 400 / INVALID_ARGUMENT. Referência: https://ai.google.dev/gemini-api/docs/structured-output#limitations
+
+A interface atualiza o acompanhamento e o resultado em regiões separadas durante a edição do formulário e mostra falhas também junto ao botão de geração, preservando os campos e o foco. Cache v21.

@@ -51,19 +51,17 @@ export function schemaForCalendar(profile,calendar=trainingCalendar(profile)){
   const schema=structuredClone(suggestionSchema);
   const phases=phaseCalendar(profile);
   schema.properties.phases={type:'array',minItems:phases.length,maxItems:phases.length,items:{type:'object',properties:{title:{type:'string'},focus:{type:'string'}},required:['title','focus'],additionalProperties:false}};
-  const template=schema.properties.weeks.items;
-  schema.properties.weeks={type:'array',minItems:calendar.length,maxItems:calendar.length,prefixItems:calendar.map(slot=>{
-    const week=structuredClone(template);
-    week.properties.start={type:'string',enum:[slot.start]};
-    week.properties.totalKm={type:'number',minimum:0,maximum:slot.weeklyKmCeiling};
-    week.properties.sessions.minItems=0;week.properties.sessions.maxItems=slot.maxSessions;
-    if(slot.availableDates.length)week.properties.sessions.items.properties.date={type:'string',enum:slot.availableDates};
-    week.properties.sessions.items.properties.km={type:'number',minimum:0,maximum:slot.sessionKmCeiling};
-    week.properties.sessions.items.properties.rpe={type:'integer',minimum:1,maximum:Math.min(intensityPolicy(profile).maxOverallRpe,profile.review?.maxRpe??10)};
-    const session=week.properties.sessions.items;session.properties.workout=structuredClone(workoutSchema);session.properties.workout.properties.type.enum=[...intensityPolicy(profile).allowedTypes];session.properties.workout.properties.blocks.items.properties.rpe.maximum=intensityPolicy(profile).maxPeakRpe;session.required.push('workout');
-    week.properties.sessions.items.properties.minutes={type:'number',minimum:1,maximum:Math.max(slot.maxMinutes,slot.longMinutes)};
-    return week;
-  })};
+  // Keep a single session/block shape. Per-week tuples plus nested numeric/array
+  // bounds multiply the provider grammar state space; application validation remains authoritative.
+  const week=schema.properties.weeks.items,session=week.properties.sessions.items;
+  week.properties.start={type:'string',description:'Copie o start da semana correspondente no calendário, na mesma ordem.'};
+  session.properties.date={type:'string',description:'Data ISO entre as availableDates da semana correspondente.'};
+  session.properties.workout=structuredClone(workoutSchema);
+  session.properties.workout.properties.type.enum=[...intensityPolicy(profile).allowedTypes];
+  session.required.push('workout');
+  const compact=node=>{if(!node||typeof node!=='object')return;for(const key of ['minimum','maximum','minItems','maxItems'])delete node[key];for(const value of Object.values(node))if(value&&typeof value==='object')compact(value);};
+  compact(week);
+  schema.properties.weeks={type:'array',minItems:calendar.length,maxItems:calendar.length,items:week};
   return schema;
 }
 async function geminiError(response,model){
@@ -80,6 +78,7 @@ async function geminiError(response,model){
   else if(response.status===404)hint=`O modelo ${model} não está disponível neste endpoint ou para esta conta. Confira um modelo compatível no AI Studio.`;
   else if(response.status===401||response.status===403)hint='O Google recusou o acesso. Confira as permissões/restrições da chave Gemini e a disponibilidade da API na sua região.';
   else if(response.status===429)hint='A cota do Gemini foi atingida. Confira os limites do projeto no AI Studio antes de tentar novamente.';
+  else if(response.status===400&&/too many states|too much branching|schema.{0,80}(?:complex|deep|nested)|constraint.{0,80}(?:states|branching)/i.test(message))hint='O Google rejeitou a complexidade do formato do plano. A integração precisa de um formato JSON mais simples.';
   else if(response.status===400)hint='O Google rejeitou a requisição. Confira a compatibilidade do modelo com generateContent e saída JSON estruturada.';
   const failure=new ApiError(response.status===429?429:502,`${hint} ${code} Seu plano anterior foi preservado.`);failure.retryable=response.status===429||response.status>=500;return failure;
 }
