@@ -1,4 +1,4 @@
-const VERSION='dez-voltas-v8';
+const VERSION='dez-voltas-v9';
 const ASSETS=['/','/index.html','/style.css','/app.js','/profile.js','/active-plan.js','/account-sync.js','/sync-contract.js','/training-contract.js','/plan.js','/workout-fit.js','/manifest.webmanifest','/icons/icon.svg','/icons/icon-192.png','/icons/icon-512.png','/icons/maskable-512.png','/icons/apple-touch-icon.png'];
 self.addEventListener('install',event=>{event.waitUntil((async()=>{const cache=await caches.open(VERSION);for(const path of ASSETS){const r=await fetch(new Request(path,{cache:'reload',credentials:'same-origin'}));if(!r.ok||r.redirected)throw new Error('App shell unavailable');await cache.put(path,r);}await self.skipWaiting();})());});
 self.addEventListener('activate',event=>{event.waitUntil((async()=>{for(const key of await caches.keys()){if(key.startsWith('dez-voltas-')&&key!==VERSION)await caches.delete(key);}await self.clients.claim();})());});

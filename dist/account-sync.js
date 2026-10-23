@@ -22,7 +22,7 @@ export async function connectAccount(id){
  }catch{owner=null;report('Não foi possível preparar a cópia local. Exporte um backup antes de continuar.');return;}
  await synchronize(turn);
 }
-export function accountChanged(){if(!owner||!adapter||applying)return;sequence++;dirty=true;try{cache();report('Alterações salvas neste aparelho. Aguardando sincronização…');clearTimeout(timer);timer=setTimeout(()=>synchronize(epoch),1000);}catch{report('Sem espaço para a cópia local. Exporte um backup.');}}
+export function accountChanged(){if(!owner||!adapter||applying)return;try{const saved=JSON.parse(localStorage.getItem(key(owner))||'null');if(saved&&JSON.stringify(saved.document)===JSON.stringify(adapter.capture(owner)))return;sequence++;dirty=true;cache();report('Alterações salvas neste aparelho. Aguardando sincronização…');clearTimeout(timer);timer=setTimeout(()=>synchronize(epoch),1000);}catch{report('Sem espaço para a cópia local. Exporte um backup.');}}
 export async function synchronize(turn=epoch){
  if(!owner||!adapter||busy||turn!==epoch)return;
  if(conflict){report('Há alterações em outro aparelho. Escolha qual cópia manter abaixo.');return;}

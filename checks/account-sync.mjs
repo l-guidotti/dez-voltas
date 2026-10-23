@@ -32,6 +32,7 @@ const generated=empty(A);generated.profile={version:1,profile,plan,generatedAt:n
 assert.equal(validateAccountDocument(generated,A).state.logs[gs.id].notes,'Diário do plano gerado');
 remote={revision:1,document:generated};const generatedDevice=device();await generatedDevice.context.connectAccount(A);assert.equal(generatedDevice.doc.archive.plans[0].active,true);assert.equal(generatedDevice.doc.state.logs[gs.id].notes,'Diário do plano gerado');remote=null;
 const one=device();await one.context.connectAccount(A);one.change('Treino no primeiro aparelho');await one.context.synchronize();assert.equal(remote.revision,1);
+const beforeNoop=remote.revision;one.context.accountChanged();await one.context.synchronize();assert.equal(remote.revision,beforeNoop);
 const two=device();await two.context.connectAccount(A);assert.equal(two.doc.state.logs[id].notes,'Treino no primeiro aparelho');assert.equal(two.context.hasSyncConflict(),false);
 offline=true;two.change('Registro offline');await two.context.synchronize();assert.ok(two.context.syncMessage().includes('preservada'));offline=false;
 const reopened=device(two.storage);offline=true;reopened.context.resumeAccountSync();await new Promise(resolve=>setImmediate(resolve));reopened.change('Registro offline');offline=false;await reopened.context.synchronize();assert.equal(remote.document.state.logs[id].notes,'Registro offline');
