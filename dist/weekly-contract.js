@@ -47,6 +47,8 @@ export function prepareWeeklyReview(context,today=localToday()){
  const original=context.profile;
  const profile=validateProfile({...original,startDate:today,weeklyKm:Math.min(200,km),longestKm:longest,days:c.days,maxMinutes:c.maxMinutes,longMinutes:c.longMinutes,consent:true,
   ...(original.details?{details:{...original.details,longDay:c.days.includes(original.details.longDay)?original.details.longDay:null}}:{}),review},today,{allowReview:true});
- const evidence={weekStart:start,weekEnd:end,checkin:c,planned:planned.map(({id,...x})=>x),performed:logs.map(({id,...x})=>x),completion,plannedKm,plannedMinutes,performedKm:km,performedMinutes:minutes,perceivedLoad:load,limits:review};
+ const existingPhases=Array.isArray(context.existingPhases)?context.existingPhases.slice(0,12).map(x=>({start:x.start,end:x.end,title:String(x.title||'').slice(0,100),focus:String(x.focus||'').slice(0,500)})):[];
+ const upcoming=Array.isArray(context.upcoming)?context.upcoming.slice(0,28).map(x=>({date:x.date,title:String(x.title||'').slice(0,120),km:Number(x.km),minutes:Number(x.minutes),rpe:Number(x.rpe),long:x.long===true})):[];
+ const evidence={existingPhases,upcoming,weekStart:start,weekEnd:end,checkin:c,planned:planned.map(({id,...x})=>x),performed:logs.map(({id,...x})=>x),completion,plannedKm,plannedMinutes,performedKm:km,performedMinutes:minutes,perceivedLoad:load,limits:review};
  return {profile,evidence};
 }

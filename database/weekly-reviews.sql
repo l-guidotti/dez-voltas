@@ -88,6 +88,8 @@ begin
   select profile into p from public.training_plans where user_id=c.user_id and id=c.source_plan_id and not deleted and adopted;
   if p is null then continue;end if;
   ctx:=jsonb_build_object('sourcePlanId',c.source_plan_id,'weekStart',c.week_start,'weekEnd',c.week_end,'checkin',c.report,'profile',p,
+   'existingPhases',(select coalesce(plan->'phases','[]') from public.training_plans where user_id=c.user_id and id=c.source_plan_id),
+   'upcoming',(select coalesce(jsonb_agg(jsonb_build_object('date',date,'title',title,'km',km,'minutes',minutes,'rpe',rpe,'long',long_run)),'[]') from public.training_sessions where user_id=c.user_id and plan_id=c.source_plan_id and not deleted and date>c.week_end and date<=c.week_end+28),
    'currentPain',(select coalesce(draft->>'pain','none') from public.runner_profiles where user_id=c.user_id and not deleted),
    'previousCheckin',(select report from public.weekly_checkins where user_id=c.user_id and week_end=c.week_start-1 order by updated_at desc limit 1),
    'planned',(select coalesce(jsonb_agg(jsonb_build_object('id',id,'date',date,'km',km,'minutes',minutes,'rpe',rpe)),'[]') from public.training_sessions where user_id=c.user_id and plan_id=c.source_plan_id and not deleted and date between c.week_start and c.week_end),
