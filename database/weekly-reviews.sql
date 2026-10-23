@@ -13,7 +13,7 @@ grant select on public.weekly_checkins to authenticated;
 create policy own_weekly_checkins on public.weekly_checkins for select to authenticated using((select auth.uid())=user_id);
 create index weekly_checkins_job on public.weekly_checkins(job_id) where job_id is not null;
 create index weekly_checkins_history on public.weekly_checkins(user_id,week_end desc);
-create index weekly_checkins_pending on public.weekly_checkins(next_enqueue_at,week_end) where job_id is null and queue_error is null;
+create index weekly_checkins_pending on public.weekly_checkins(next_enqueue_at,week_end) where job_id is null and queue_error is null and report->>'consent'='true';
 alter table public.ai_generation_jobs add column kind text not null default 'initial' check(kind in ('initial','weekly_review')),
  add column context jsonb check(octet_length(context::text)<=120000),add column review_id uuid unique references public.weekly_checkins(id) on delete set null;
 grant select(kind,review_id) on public.ai_generation_jobs to authenticated;
