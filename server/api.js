@@ -73,10 +73,56 @@ async function geminiError(response,model){
   else if(response.status===401||response.status===403)hint='O Google recusou o acesso. Confira as permissões/restrições da chave Gemini e a disponibilidade da API na sua região.';
   else if(response.status===429)hint='A cota do Gemini foi atingida. Confira os limites do projeto no AI Studio antes de tentar novamente.';
   else if(response.status===400)hint='O Google rejeitou a requisição. Confira a compatibilidade do modelo com generateContent e saída JSON estruturada.';
-  return new ApiError(response.status===429?429:502,`${hint} ${code} Seu plano anterior foi preservado.`);
+  const failure=new ApiError(response.status===429?429:502,`${hint} ${code} Seu plano anterior foi preservado.`);failure.retryable=response.status===429||response.status>=500;return failure;
+}
+async function queueResponse(response){
+ const data=await response.json();if(response.ok)return data;
+ const messages={USER_DAILY_LIMIT:'Você atingiu o limite de 5 solicitações hoje. Tente amanhã (limite renovado à meia-noite UTC).',QUEUE_PAUSED:'A geração está pausada temporariamente. Seu plano anterior foi preservado.',QUEUE_FULL:'A fila está cheia. Tente novamente mais tarde.'};
+ if(messages[data?.message])throw new ApiError(data.message==='QUEUE_PAUSED'?503:429,messages[data.message]);
+ if(data?.code==='42501')throw new ApiError(403,'Acesso não autorizado à fila.');
+ if(data?.code==='22023'||data?.code==='22P02')throw new ApiError(400,'Solicitação de geração inválida.');
+ throw new ApiError(response.status===401?401:503,'Não foi possível acessar a fila. Tente novamente; sua solicitação não será duplicada.');
+}
+async function queueRpc(env,name,body,access){return queueResponse(await fetch(authConfig(env)+'/rest/v1/rpc/'+name,{method:'POST',headers:{apikey:env.SUPABASE_ANON_KEY,'content-type':'application/json',...(access?{Authorization:'Bearer '+access}:{})},body:JSON.stringify(body),signal:AbortSignal.timeout(20000)}));}
+async function queueRead(env,path,access){return queueResponse(await fetch(authConfig(env)+'/rest/v1/'+path,{headers:{apikey:env.SUPABASE_ANON_KEY,Authorization:'Bearer '+access},signal:AbortSignal.timeout(20000)}));}
+export async function generateSuggestion(profile,env){
+    const calendar=trainingCalendar(profile),phases=phaseCalendar(profile);
+    const payload=JSON.stringify({systemInstruction:{parts:[{text:system+' Use o calendário fornecido como autoridade para weeks: copie start exatamente, mantenha a ordem e use somente availableDates de cada semana. Semana começa em startDate, mesmo quando não for segunda-feira. Não inclua descanso como sessão. Não exceda maxSessions, weeklyKmCeiling e sessionKmCeiling; são limites, não metas de carga.'}]},contents:[{role:'user',parts:[{text:JSON.stringify({profile,calendar,phases})}]}],generationConfig:{temperature:0.4,maxOutputTokens:12000,responseMimeType:'application/json',responseJsonSchema:schemaForCalendar(profile,calendar)}});
+    if(encoder.encode(payload).length>60000)throw new ApiError(422,'A solicitação excedeu o tamanho permitido para geração.');
+    const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+env.GEMINI_MODEL+':generateContent',{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':env.GEMINI_API_KEY.trim()},body:payload,signal:AbortSignal.timeout(55000)});
+    if(!response.ok)throw await geminiError(response,env.GEMINI_MODEL);
+    const data=await response.json(),candidate=data.candidates?.[0];
+    const tokenCount=n=>Number.isSafeInteger(n)&&n>=0?Math.min(n,10000000):0;
+    const usage={input:tokenCount(data.usageMetadata?.promptTokenCount),output:tokenCount(data.usageMetadata?.candidatesTokenCount)+tokenCount(data.usageMetadata?.thoughtsTokenCount)};
+    try{
+     if(candidate?.finishReason!=='STOP')throw new ApiError(502,'A sugestão veio incompleta. Tente novamente.');
+     let plan;try{plan=validateSuggestion(attachPhaseDates(JSON.parse(candidate.content.parts.filter(p=>!p.thought).map(p=>p.text||'').join('')),profile),profile);}catch(e){throw new ApiError(502,'Não foi possível validar a sugestão: '+e.message);}
+     return {result:{profile,plan,generatedAt:new Date().toISOString(),model:env.GEMINI_MODEL,version:1},usage};
+    }catch(error){error.usage=usage;throw error;}
+}
+async function runQueuedGeneration(request,env){
+ const runner_key=request.headers.get('x-dv-runner-key');
+ if(!runner_key||!/^[a-f0-9]{64}$/.test(runner_key))throw new ApiError(403,'Acesso não autorizado à fila.');
+ if(!env.GEMINI_API_KEY||!/^gemini-[a-z0-9.-]+$/.test(env.GEMINI_MODEL||''))throw new ApiError(503,'Integração indisponível.');
+ const job=await queueRpc(env,'claim_ai_generation',{runner_key,worker_model:env.GEMINI_MODEL});
+ if(!job)return {processed:false};
+ let result=null,error=null,retryable=false,usage={input:0,output:0};
+ try{
+  const profile=validateProfile(job.profile);
+  if(profile.pain!=='none'||profile.details&&profile.details.registrationCompleted!==true)throw new ApiError(422,'Revise e atualize seu cadastro antes de gerar um plano.');
+  const generated=await generateSuggestion(profile,env);result=generated.result;usage=generated.usage;
+ }catch(e){
+  if(e.usage)usage=e.usage;
+  error=e instanceof ApiError?e.message:e.name==='TimeoutError'?'A geração demorou demais. Seu plano anterior foi preservado.':e instanceof TypeError?'Falha de conexão com o serviço de geração. Seu plano anterior foi preservado.':'O cadastro precisa ser atualizado ou a sugestão não pôde ser validada. Seu plano anterior foi preservado.';
+  retryable=e.retryable===true||e.name==='TimeoutError'||e instanceof TypeError;
+ }
+ // A failed acknowledgement leaves the lease to expire. The next scheduled tick recovers it.
+ const saved=await queueRpc(env,'finish_ai_generation',{runner_key,job_id:job.id,job_lease:job.lease,job_result:result,job_error:error,retryable,tokens_in:usage.input,tokens_out:usage.output});
+ return {processed:true,saved};
 }
 export async function handleApi(request,env){try{
   const url=new URL(request.url),path=url.pathname;
+  if(path==='/api/internal/ai-runner'&&request.method==='POST')return json(await runQueuedGeneration(request,env));
   if(request.method==='POST'){
     if(request.headers.get('origin')!==url.origin)throw new ApiError(403,'Origem não autorizada.');
     if(!env.APP_ORIGIN||env.APP_ORIGIN!==url.origin)throw new ApiError(503,'O domínio da aplicação ainda não foi configurado.');
@@ -135,18 +181,22 @@ export async function handleApi(request,env){try{
     if(!model.supportedGenerationMethods?.includes('generateContent'))throw new ApiError(502,'O modelo configurado não aceita generateContent. Escolha um modelo de texto compatível no AI Studio.');
     return json({message:`Conexão confirmada com ${env.GEMINI_MODEL}. Chave e acesso ao modelo responderam; a geração do treino ainda precisa ser testada.`});
   }
+  if(path==='/api/training/jobs'&&request.method==='GET'){
+    await user(request,env);
+    const id=url.searchParams.get('id');if(id&&!/^[0-9a-f-]{36}$/i.test(id))throw new ApiError(400,'Identificador inválido.');
+    const access=cookies(request)['__Host-dv-access'];
+    const fields='id,status,attempts,created_at,updated_at,next_attempt_at,error,model';
+    const history=await queueRead(env,'ai_generation_jobs?select='+fields+'&order=created_at.desc&limit=10',access);
+    const job=id?(await queueRead(env,'ai_generation_jobs?select='+fields+',result&id=eq.'+id+'&limit=1',access))[0]||null:history[0]||null;
+    return json({job,history,limits:{dailyRequests:5,maxAttempts:2}});
+  }
   if(path==='/api/training/suggest'&&request.method==='POST'){
     const u=await user(request,env);const raw=await bodyOf(request);let profile;try{profile=validateProfile(raw);}catch(e){throw new ApiError(400,e.message);}
     if(profile.details&&!profile.details.registrationCompleted)throw new ApiError(409,'Conclua seu cadastro antes de gerar o plano.');
     if(profile.pain!=='none')throw new ApiError(422,'Com dor atual ou retorno de lesão, revise a preparação com um profissional antes de gerar cargas.');
     if(!env.GEMINI_API_KEY||!/^gemini-[a-z0-9.-]+$/.test(env.GEMINI_MODEL||''))throw new ApiError(503,'A integração com o Gemini ainda não foi configurada.');
-    await quota(env,'generation:'+u.id,5,86400000);
-    const calendar=trainingCalendar(profile),phases=phaseCalendar(profile);
-    const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+env.GEMINI_MODEL+':generateContent',{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':env.GEMINI_API_KEY.trim()},body:JSON.stringify({systemInstruction:{parts:[{text:system+' Use o calendário fornecido como autoridade para weeks: copie start exatamente, mantenha a ordem e use somente availableDates de cada semana. Semana começa em startDate, mesmo quando não for segunda-feira. Não inclua descanso como sessão. Não exceda maxSessions, weeklyKmCeiling e sessionKmCeiling; são limites, não metas de carga.'}]},contents:[{role:'user',parts:[{text:JSON.stringify({profile,calendar,phases})}]}],generationConfig:{temperature:0.4,maxOutputTokens:12000,responseMimeType:'application/json',responseJsonSchema:schemaForCalendar(profile,calendar)}}),signal:AbortSignal.timeout(55000)});
-    if(!response.ok)throw await geminiError(response,env.GEMINI_MODEL);
-    const data=await response.json(),candidate=data.candidates?.[0];if(candidate?.finishReason!=='STOP')throw new ApiError(502,'A sugestão veio incompleta. Tente novamente.');
-    let plan;try{plan=validateSuggestion(attachPhaseDates(JSON.parse(candidate.content.parts.filter(p=>!p.thought).map(p=>p.text||'').join('')),profile),profile);}catch(e){throw new ApiError(502,'Não foi possível validar a sugestão: '+e.message);}
-    return json({profile,plan,generatedAt:new Date().toISOString(),model:env.GEMINI_MODEL,version:1});
+    const job=await queueRpc(env,'enqueue_ai_generation',{job_profile:profile,client_request_id:request.headers.get('idempotency-key')||crypto.randomUUID()},cookies(request)['__Host-dv-access']);
+    return json({job},202);
   }
   return json({error:'Rota não encontrada.'},404);
 }catch(e){return json({...(e instanceof ApiError&&e.code?{code:e.code}:{}),error:e instanceof ApiError?e.message:e.name==='TimeoutError'?'A solicitação demorou demais. Tente novamente.':'Não foi possível concluir a solicitação.'},e instanceof ApiError?e.status:502);}}

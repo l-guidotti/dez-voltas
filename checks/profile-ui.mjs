@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import {webcrypto} from 'node:crypto';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate} from '../dist/training-contract.js';
 const events={},windowEvents={},storage=new Map();
-const context=vm.createContext({sessionFetch:(...args)=>context.fetch(...args),configureAccountSync(){},activeSyncOwner:()=>'new-runner',connectAccount:async()=>{},accountChanged(){},syncMessage:()=>'Sincronizado',hasSyncConflict:()=>false,synchronize:async()=>{},resolveSync:async()=>{},replaceOwnerArchive(){},adoptSuggestion:(owner,result)=>{context.adopted={owner,result}},setPlanOwner(){},getActivePlan:()=>null,validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate,Intl,Date,URL,URLSearchParams,Blob,setTimeout,clearTimeout,AbortController,Event,requestAnimationFrame:fn=>fn(),document:{addEventListener:(type,callback)=>events[type]=callback,querySelector:()=>null},window:{addEventListener:(name,fn)=>windowEvents[name]=fn,dispatchEvent(){}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},fetch:async()=>{throw Error('offline')},location:{href:'https://example.com/#perfil'},history:{replaceState(){}}});
+const context=vm.createContext({crypto:webcrypto,sessionFetch:(...args)=>context.fetch(...args),configureAccountSync(){},activeSyncOwner:()=>'new-runner',connectAccount:async()=>{},accountChanged(){},syncMessage:()=>'Sincronizado',hasSyncConflict:()=>false,synchronize:async()=>{},resolveSync:async()=>{},replaceOwnerArchive(){},adoptSuggestion:(owner,result)=>{context.adopted={owner,result}},setPlanOwner(){},getActivePlan:()=>null,validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate,Intl,Date,URL,URLSearchParams,Blob,setTimeout,clearTimeout,AbortController,Event,requestAnimationFrame:fn=>fn(),document:{addEventListener:(type,callback)=>events[type]=callback,querySelector:()=>null},window:{addEventListener:(name,fn)=>windowEvents[name]=fn,dispatchEvent(){}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},fetch:async()=>{throw Error('offline')},location:{href:'https://example.com/#perfil'},history:{replaceState(){}}});
 vm.runInContext(fs.readFileSync('dist/profile.js','utf8').replace(/^import .*;\n/gm,'').replace(/export /g,''),context);
 let html=context.renderProfile();assert.ok(html.includes('Receber link de acesso'));assert.ok(!html.includes('id="profile-goal"'));assert.ok(html.includes('primeiro acesso'));
 vm.runInContext(`account={id:'uid-a',email:'<script>@example.com'}; authChecked=true;`,context);
@@ -28,8 +29,12 @@ assert.equal(calls,0);assert.ok(context.renderProfile().includes('Autorize o env
 fields.consent='on';
 const p=validateProfile({...fields,consent:true});
 const plan={summary:'Base gradual',feasibility:'Reavaliar conforme adaptação',warnings:[],phases:[{start:p.startDate,end:p.targetDate,title:'Preparação',focus:'Base e recuperação'}],weeks:Array.from({length:4},(_,i)=>{const start=addDate(p.startDate,i*7);const date=Array.from({length:7},(_,n)=>addDate(start,n)).find(d=>p.days.includes(new Date(d+'T12:00:00Z').getUTCDay()));return {start,totalKm:5,focus:'Confortável',sessions:[{date,title:'Rodagem',km:5,minutes:35,rpe:3,long:false,instructions:'Conversa confortável'}]};})};
-context.fetch=async()=>Response.json({profile:p,plan,model:'simulado',generatedAt:new Date().toISOString(),version:1});
+context.fetch=async()=>Response.json({job:{id:'00000000-0000-4000-8000-000000000001',status:'queued',attempts:0}},{status:202});
 await events.submit({target:form,preventDefault(){}});
+assert.ok(context.renderProfile().includes('Pode sair desta tela ou fechar o app'));
+assert.ok(context.renderProfile().includes('Geração em andamento'));
+context.fetch=async()=>Response.json({job:{id:'00000000-0000-4000-8000-000000000001',status:'completed',attempts:1,result:{profile:p,plan,model:'simulado',generatedAt:new Date().toISOString(),version:1}},history:[]});
+await context.refreshJobs(true);
 assert.ok(context.renderProfile().includes('id="profile-result"'));
 assert.ok(visited.includes('#profile-result'));assert.ok(visited.includes('focus:#profile-result'));
 context.fetch=async()=>{const e=new Error('aborted');e.name='AbortError';throw e;};
@@ -68,3 +73,20 @@ console.log('PASS: ações da conta no cabeçalho, logout chama API e retorna ao
 
 await windowEvents['session-restored']({detail:{id:'new-runner',email:'new@example.com'}});assert.ok(context.renderAccountActions().includes('Minha conta'));assert.ok(context.renderProfile().includes('Acesso restabelecido automaticamente'));
 console.log('PASS: conta é restaurada na interface ao recuperar a conexão, preservando a sincronização em andamento.');
+
+// Reopen on another device: retrieve a finished server job without submitting again.
+await Promise.resolve();await Promise.resolve();
+vm.runInContext('result=null;generationJob=null;generationOwner=null;loadedJobId=null;jobReading=false;',context);
+const reopenedId='00000000-0000-4000-8000-000000000002';let reopenedGets=0;
+context.fetch=async path=>{assert.ok(path.startsWith('/api/training/jobs'));reopenedGets++;return Response.json({job:{id:reopenedId,status:'completed',attempts:1,...(path.includes('?id=')?{result:{profile:p,plan,model:'simulado',generatedAt:new Date().toISOString(),version:1}}:{})},history:[]});};
+const oldAdopted=context.adopted;
+await context.refreshJobs(true);
+assert.equal(reopenedGets,2);assert.ok(context.renderProfile().includes('Base gradual'));assert.equal(context.adopted,oldAdopted,'Retrieval must not adopt a plan');
+assert.ok(JSON.parse(storage.get('dez-voltas-profile-v1:new-runner')).plan);
+await context.refreshJobs();assert.equal(reopenedGets,3,'Repeat status poll must not download the full result again');
+// A late response for a logged-out account cannot restore its suggestion.
+let release;context.fetch=()=>new Promise(resolve=>release=resolve);
+const late=context.refreshJobs();vm.runInContext('account=null;result=null;resetJobs();',context);
+release(Response.json({job:{id:reopenedId,status:'completed',result:{profile:p,plan}},history:[]}));await late;
+assert.ok(!context.renderProfile().includes('Base gradual'));assert.equal(vm.runInContext('generationOwner',context),null);
+console.log('PASS: resultado recuperado após reabertura sem nova geração/adoção, consulta leve e resposta atrasada isolada após logout.');

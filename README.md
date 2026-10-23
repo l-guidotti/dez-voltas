@@ -35,11 +35,11 @@ Não é necessário converter o projeto Pages para integração Git nem trocar o
 
 ## Dados e limites atuais
 
-- Os registros e sugestões salvos ficam no aparelho, não neste repositório. Não há sincronização de treinos entre dispositivos.
+- Perfil, planos e diário ficam no Supabase com uma cópia local e sincronização entre aparelhos; os dados pessoais não são armazenados neste repositório.
 - Supabase Auth fornece acesso por Google (após habilitar o provedor) e link de e-mail como alternativa. Configure o OAuth conforme [LOGIN-GOOGLE.md](LOGIN-GOOGLE.md); para e-mails fora da equipe do projeto, configure SMTP.
 - O Gemini recebe somente os dados de treino autorizados no formulário. O e-mail da conta não é enviado ao modelo.
 - A sugestão detalha até 28 dias e apresenta as fases até o objetivo. O botão Usar este plano atualiza Plano, Hoje, sessões para registro e exportação de agenda. Novas sugestões não trocam automaticamente o plano em uso. O histórico anterior permanece disponível; o backup JSON inclui os planos adotados e seus registros.
-- O controle de uso tem limite de 5 tentativas de geração por dia/usuário. Falhas também contam. KV tem consistência eventual; não constitui teto financeiro exato.
+- A geração usa uma fila persistente: 5 solicitações/dia por conta, 20 tentativas/dia no total, até 2 simultâneas e uma retentativa para falhas temporárias. Reservas são atômicas no banco. Os limites contêm chamadas, sem prometer um teto monetário. Consulte [FILA-IA.md](FILA-IA.md).
 - A disponibilidade do modelo e as cotas da conta Google precisam de validação real. Consultar metadados não comprova que a geração está habilitada.
 
 Configuração detalhada: [README-GEMINI.md](README-GEMINI.md).
@@ -53,3 +53,5 @@ Banco separado e sincronização incremental: perfil, planos, sessões e diário
 Sessão persistente e renovação automática: [SESSAO.md](SESSAO.md). Tokens ficam somente em cookies HttpOnly. As requisições de treino/sincronização repetem uma única vez após renovar a sessão e verificam a conta esperada antes de gravar.
 
 Personalização de Hoje, Objetivo e Guia: [PERSONALIZACAO.md](PERSONALIZACAO.md). As telas usam o objetivo do plano em uso; sem plano adotado, usam o cadastro salvo. Metas por distância, tempo e backyard recebem conteúdos próprios, e novas contas não recebem o calendário original.
+
+Geração assíncrona com andamento e resultado recuperável: [FILA-IA.md](FILA-IA.md). É possível fechar o PWA após a confirmação de que a solicitação foi salva.

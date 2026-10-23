@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
 import {validateProfile,validateStoredProfile,validateSuggestion,addDate,localToday,daysBetween} from '../dist/training-contract.js';
-import {handleApi,trainingCalendar,schemaForCalendar,phaseCalendar,attachPhaseDates} from '../server/api.js';
+import {handleApi,generateSuggestion,trainingCalendar,schemaForCalendar,phaseCalendar,attachPhaseDates} from '../server/api.js';
 globalThis.crypto ??= webcrypto;
 const start=localToday();
 const raw={goal:'backyard',target:10,startDate:start,targetDate:addDate(start,170),weeklyKm:10,longestKm:8,weeksConsistent:2,days:[0,2,3,5],maxMinutes:60,longMinutes:120,pain:'none',consent:true};
@@ -54,19 +54,17 @@ let r=await handleApi(request('auth/link',{email:user.email},''),env);assert.equ
 assert.equal((await handleApi(request('auth/callback',{code:'x'},''),env)).status,401);
 r=await handleApi(request('auth/callback',{code:'x'},'__Host-dv-pkce='+pkce),env);assert.equal(r.status,200);assert.match(r.headers.get('set-cookie'),/__Host-dv-access=confirmed-access/);assert.ok(!(await r.text()).includes('confirmed-access'));
 const details={registrationCompleted:true,eventName:'Prova local',terrain:'trail',elevationM:450,experience:'returning',experienceMonths:18,recentRuns:2,longDay:null,finishMinutes:null};
-r=await handleApi(request('training/suggest',{...raw,details,email:'do-not-send@example.com'}),env);assert.equal(r.status,200);assert.equal((await r.json()).plan.weeks.length,4);const call=calls.find(x=>x.url.includes('generateContent'));assert.ok(!call.options.body.includes('@'));assert.equal(call.options.headers['x-goog-api-key'],'secret');
+async function generationResponse(profile,env){try{return Response.json((await generateSuggestion(profile,env)).result);}catch(e){return Response.json({error:e.message},{status:e.status||502});}}
+r=await generationResponse(validateProfile({...raw,details,email:'do-not-send@example.com'}),env);assert.equal(r.status,200);assert.equal((await r.json()).plan.weeks.length,4);const call=calls.find(x=>x.url.includes('generateContent'));assert.ok(!call.options.body.includes('@'));assert.equal(call.options.headers['x-goog-api-key'],'secret');
 const payload=JSON.parse(call.options.body),sent=JSON.parse(payload.contents[0].parts[0].text);assert.equal(sent.calendar[0].start,p.startDate);assert.deepEqual(sent.profile.days,p.days);assert.equal(sent.profile.details.terrain,'trail');assert.equal(sent.profile.details.elevationM,450);assert.equal(payload.generationConfig.responseJsonSchema.properties.weeks.prefixItems.length,4);
 assert.deepEqual(sent.phases,phaseCalendar(p));
-for(let i=0;i<4;i++)assert.equal((await handleApi(request('training/suggest',raw),env)).status,200);
-assert.equal((await handleApi(request('training/suggest',raw),env)).status,429);
-assert.equal((await handleApi(request('training/suggest',raw),{...env,AI_USAGE:null})).status,503);
 r=await handleApi(request('auth/logout',{}),env);assert.equal(r.status,200);assert.match(r.headers.get('set-cookie'),/Max-Age=0/);
 const otherEnv={...env,AI_USAGE:{async get(){return null},async put(){}}};
-globalThis.fetch=async(url)=>url.endsWith('/user')?Response.json(user):Response.json({candidates:[{finishReason:'MAX_TOKENS'}]});assert.equal((await handleApi(request('training/suggest',raw),otherEnv)).status,502);
-globalThis.fetch=async(url)=>url.endsWith('/user')?Response.json(user):Response.json({error:'secret provider details'},{status:500});r=await handleApi(request('training/suggest',raw),otherEnv);assert.equal(r.status,502);assert.ok(!(await r.text()).includes('secret provider details'));
+globalThis.fetch=async(url)=>url.endsWith('/user')?Response.json(user):Response.json({candidates:[{finishReason:'MAX_TOKENS'}]});assert.equal((await generationResponse(p,otherEnv)).status,502);
+globalThis.fetch=async(url)=>url.endsWith('/user')?Response.json(user):Response.json({error:'secret provider details'},{status:500});r=await generationResponse(p,otherEnv);assert.equal(r.status,502);assert.ok(!(await r.text()).includes('secret provider details'));
 for(const [http,reason,status,expected] of [[400,'API_KEY_INVALID','INVALID_ARGUMENT','recusou a chave'],[403,'SERVICE_DISABLED','PERMISSION_DENIED','desativada'],[403,'API_KEY_HTTP_REFERRER_BLOCKED','PERMISSION_DENIED','restrições'],[404,null,'NOT_FOUND','não está disponível'],[429,null,'RESOURCE_EXHAUSTED','cota'],[400,null,'INVALID_ARGUMENT','compatibilidade']]){
  globalThis.fetch=async(url)=>url.endsWith('/user')?Response.json(user):Response.json({error:{message:'secret provider details',status,details:[{reason}]}},{status:http});
- r=await handleApi(request('training/suggest',raw),otherEnv);const text=await r.text();assert.ok(text.includes(expected));assert.ok(text.includes('HTTP '+http));assert.ok(!text.includes('secret provider details'));
+ r=await generationResponse(p,otherEnv);const text=await r.text();assert.ok(text.includes(expected));assert.ok(text.includes('HTTP '+http));assert.ok(!text.includes('secret provider details'));
 }
 let metadataCalls=0;
 globalThis.fetch=async(url,options)=>{if(url.endsWith('/user'))return Response.json(user);metadataCalls++;assert.ok(!url.includes('generateContent'));assert.equal(options.body,undefined);return Response.json({supportedGenerationMethods:['generateContent']});};

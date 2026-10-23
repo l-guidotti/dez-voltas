@@ -1,6 +1,6 @@
 # Objetivo pessoal e sugestões com Gemini
 
-Código preparado para Cloudflare Pages. Não está publicado nem conectado a contas externas. Nenhum banco de treinos foi criado.
+PWA publicada no Cloudflare Pages, com Supabase Auth, persistência por conta e geração assíncrona. Consulte [FILA-IA.md](FILA-IA.md) para a arquitetura atual e operação da fila.
 
 ## Fluxo implementado
 
@@ -13,12 +13,12 @@ Código preparado para Cloudflare Pages. Não está publicado nem conectado a co
 
 ## Configuração necessária
 
-1. Em um projeto Supabase, habilite Email e Magic Link. O Supabase é usado SOMENTE para autenticação; suas contas são armazenadas pelo provedor. Não usamos seu banco para treinos. Isso adiciona um serviço externo com seus próprios termos e limites.
+1. Em um projeto Supabase, habilite Email e Magic Link. O Supabase fornece autenticação, armazenamento de perfil/treinos/diário e fila de geração, com seus próprios termos e limites.
 2. Cadastre como Site URL o domínio HTTPS definitivo da PWA e permita exatamente o redirect `https://SEU-DOMINIO/?auth=callback`. Mantenha o template Magic Link com `{{ .ConfirmationURL }}`; não substitua por OTP. O fluxo usa `/otp` com `code_challenge_method=s256` e troca o código no servidor.
 3. Configure SMTP no Supabase para usuários reais. O envio padrão possui restrições e não é uma solução de produção para qualquer destinatário. SMTP/domínio/remetente podem ter custos do fornecedor.
 4. Como este projeto usa `wrangler.jsonc`, configure nele `vars.APP_ORIGIN` com a origem exata (sem barra final), `vars.SUPABASE_URL` e `vars.GEMINI_MODEL` com um modelo disponível na sua conta compatível com generateContent e JSON Schema. Cadastre `SUPABASE_ANON_KEY` (publishable/anon; NUNCA service_role) e `GEMINI_API_KEY` como segredos no Pages, pelo painel ou `wrangler pages secret put NOME --project-name dez-voltas`. Não exponha a chave Gemini em `dist`, Git, ZIP, localStorage ou no formulário. O arquivo Wrangler é a fonte de configuração: não dependa de editar no painel os campos controlados por ele.
-5. Crie um namespace KV e declare `kv_namespaces: [{"binding":"AI_USAGE","id":"ID_REAL_DO_NAMESPACE"}]` no arquivo `wrangler.jsonc`. Para previews, use um namespace separado e configure explicitamente todas as variáveis e bindings necessários em `env.preview`, incluindo `APP_ORIGIN` correspondente; não reutilize a configuração de produção sem ajuste. Guarda somente contadores temporários com chaves derivadas por SHA-256. Sem o binding, as solicitações de link e geração ficam desabilitadas. Não é um banco de perfis/treinos.
-6. A cota inicial é 5 tentativas de geração/dia/usuário e 3 links/hora/e-mail, mais 6 links/hora/IP. KV tem consistência eventual e leitura/gravação não atômica: isso reduz abuso, mas não é um teto financeiro exato. Configure cotas no Google Cloud e acompanhe consumo; alertas de orçamento não bloqueiam gastos automaticamente. Modelos, tokens e plano do Gemini têm preços/limites próprios.
+5. Crie um namespace KV e declare `kv_namespaces: [{"binding":"AI_USAGE","id":"ID_REAL_DO_NAMESPACE"}]` no arquivo `wrangler.jsonc`. Para previews, use um namespace separado e configure explicitamente todas as variáveis e bindings necessários em `env.preview`, incluindo `APP_ORIGIN` correspondente; não reutilize a configuração de produção sem ajuste. Guarda somente contadores temporários com chaves derivadas por SHA-256. Sem o binding, as solicitações de link e diagnóstico ficam desabilitadas. A cota de geração é atômica no banco. Não é um banco de perfis/treinos.
+6. A fila admite 5 solicitações/dia/usuário, com até duas tentativas por tarefa, 20 tentativas globais/dia e dois processamentos simultâneos. Os limites são atômicos no Supabase. Login mantém KV com 3 links/hora/e-mail e 6 links/hora/IP. Esses limites de tráfego não são um teto financeiro exato. Configure cotas no Google Cloud e acompanhe consumo; alertas de orçamento não bloqueiam gastos automaticamente. Modelos, tokens e plano do Gemini têm preços/limites próprios.
 7. Antes de enviar dados reais, verifique o tratamento de dados previsto nos termos do plano Gemini escolhido. A interface pede consentimento; não transfere nome/e-mail ao modelo. Não registramos prompts, credenciais ou respostas em logs do servidor.
 
 As variáveis devem existir no servidor (Pages Functions), nunca injetadas no JavaScript público. Ambiente sem configuração retorna mensagens de indisponibilidade em vez de fabricar planos ou contas.
@@ -34,7 +34,7 @@ npx wrangler@4 pages deploy dist --project-name dez-voltas --branch main
 
 Configure os bindings e segredos no painel antes de publicar. A experiência inicial é genérica, e os dados de contas são isolados por usuário no Supabase. As definições do calendário inicial ficam apenas para compatibilidade com registros e backups antigos; não são o plano padrão de novas contas. Consulte PERSONALIZACAO.md.
 
-O service worker não intercepta `/api/`; respostas de autenticação e sugestões usam `Cache-Control: no-store`. O cache da PWA foi atualizado para v15. O token de acesso tem duração curta; o servidor conserva o refresh token em cookie protegido e a PWA renova a sessão automaticamente. Consulte SESSAO.md para concorrência, saída e migração das sessões antigas. No iPhone, abra o link no navegador que iniciou o acesso; Safari/PWA podem não compartilhar cookies. Se o link abrir em outro contexto, peça outro no Safari e continue nele.
+O service worker não intercepta `/api/`; respostas de autenticação e sugestões usam `Cache-Control: no-store`. O cache da PWA foi atualizado para v16. O token de acesso tem duração curta; o servidor conserva o refresh token em cookie protegido e a PWA renova a sessão automaticamente. Consulte SESSAO.md para concorrência, saída e migração das sessões antigas. No iPhone, abra o link no navegador que iniciou o acesso; Safari/PWA podem não compartilhar cookies. Se o link abrir em outro contexto, peça outro no Safari e continue nele.
 
 ## Validação e limites da entrega
 
@@ -58,7 +58,7 @@ A configuração padrão agora usa `gemini-3.5-flash-lite`. Um sucesso no diagn�
 
 ## Calendário explícito na geração
 
-O servidor calcula cada semana a partir de startDate, incluindo semanas parciais, e fornece ao Gemini as datas disponíveis. O JSON Schema usa prefixItems por semana, com início fixado, enumeração das datas e limites de sessões/distância/RPE. A validação permanece ativa e agora distingue início incorreto de excesso de sessões. Não há remanejamento de datas, descarte de sessões nem nova chamada automática. Testes cobrem todos os dias de início, períodos de 14/15/20/28/29 dias e virada do ano; ainda é necessário validar com Gemini real após publicar.
+O servidor calcula cada semana a partir de startDate, incluindo semanas parciais, e fornece ao Gemini as datas disponíveis. O JSON Schema usa prefixItems por semana, com início fixado, enumeração das datas e limites de sessões/distância/RPE. A validação permanece ativa e agora distingue início incorreto de excesso de sessões. Não há remanejamento de datas nem descarte de sessões. Respostas inválidas não são repetidas automaticamente; somente falhas transitórias permitem a retentativa limitada descrita em FILA-IA.md. Testes cobrem todos os dias de início, períodos de 14/15/20/28/29 dias e virada do ano; ainda é necessário validar com Gemini real após publicar.
 
 ## Cobertura das fases até o objetivo
 
@@ -71,3 +71,7 @@ Usar este plano valida e salva a proposta no aparelho, associada à conta confir
 ## Login Google
 
 A interface oferece Google como opção principal, com link de e-mail como alternativa. O servidor verifica se o provedor está habilitado em /auth/v1/settings, gera PKCE com cookie HttpOnly e devolve a URL de autorização do Supabase. O callback existente troca o código no servidor. Configurar as credenciais OAuth no Supabase conforme LOGIN-GOOGLE.md; as credenciais Google OAuth não são cadastradas no Cloudflare e não são a chave da API Gemini. A autenticação real está pendente dessa configuração externa.
+
+## Geração em fila
+
+`POST /api/training/suggest` agora salva a solicitação e responde HTTP 202 com `job`, sem chamar Gemini nessa requisição. Acompanhe em `GET /api/training/jobs`; o resultado completo é consultado com `?id=UUID`. O processador privado é acionado por cron e salva a resposta validada no banco. O usuário pode fechar o app e voltar depois. O resultado só entra no calendário após adoção explícita. A instrução de espera síncrona acima é histórica e foi substituída por esse fluxo. Configuração, limites, segurança e monitoramento: [FILA-IA.md](FILA-IA.md).
