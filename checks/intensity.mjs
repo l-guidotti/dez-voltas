@@ -32,7 +32,7 @@ bad=structuredClone(plan);delete bad.weeks[0].sessions[0].workout;assert.throws(
 const result={version:1,profile,plan:checked,generatedAt:'2027-01-04T12:00:00Z',model:'test'},owner='owner-intense',id=suggestionId(result,owner);
 const entry={...result,id,owner,active:true},doc={version:1,profile:result,draft:profile,archive:{version:1,owner,plans:[entry]},state:{version:1,logs:{},checklist:{},timer:null}};
 const roundtrip=rowsDocument(documentRows(doc,owner),owner);assert.deepEqual(roundtrip.archive.plans[0].plan,checked);assert.equal(suggestionId(roundtrip.profile,owner),id);
-const recipe=workoutRecipe({...session,id:'test',week:1});assert.equal(recipe.steps.length,10);assert.equal(recipe.steps.reduce((n,s)=>n+s.value,0),31*60000);assert.ok(workoutInstructions(session).includes('RPE 8/10'));
+const recipe=workoutRecipe({...session,id:'test',week:1});assert.equal(recipe.steps.length,10);assert.equal(workoutRecipe({...session,id:'test',week:1,km:0},{warmupMinutes:99}).steps.length,10);assert.equal(recipe.steps.reduce((n,s)=>n+s.value,0),31*60000);assert.ok(workoutInstructions(session).includes('RPE 8/10'));
 const fit=exportWorkoutFit({...session,id:'test',week:1},{createdAt:new Date('2027-01-04T12:00:00Z')});assert.equal(fitCRC(fit.bytes),0);assert.equal(fit.steps.length,10);
 assert.ok(!renderWorkout({...session.workout,purpose:'<script>evil()</script>'}).includes('<script>'));
 const schema=schemaForCalendar(profile);assert.ok(schema.properties.weeks.prefixItems[0].properties.sessions.items.required.includes('workout'));assert.ok(schema.properties.weeks.prefixItems[0].properties.sessions.items.properties.workout.properties.type.enum.includes('interval'));

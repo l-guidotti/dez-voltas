@@ -14,7 +14,6 @@ export function fitCRC(bytes){let crc=0;for(const byte of bytes){crc^=byte;for(l
 function serial(text){let h=2166136261;for(const c of text){h^=c.charCodeAt(0);h=Math.imul(h,16777619);}return (h>>>0)||1;}
 export function workoutRecipe(session,{warmupMinutes=5,cooldownMinutes=5}={}){
  if(!session||!/^\d{4}-\d{2}-\d{2}$/.test(session.date)||!Number.isFinite(session.km)||(session.km<0||session.km===0&&!session.workout)||session.km>150)throw new Error('Sessão inválida para exportação.');
- for(const minutes of [warmupMinutes,cooldownMinutes])if(!Number.isInteger(minutes)||minutes<0||minutes>15)throw new Error('Use de 0 a 15 minutos inteiros para aquecer e desacelerar.');
  if(session.workout){
   const w=session.workout,stats=workoutStats(w);if(!Array.isArray(w.blocks)||w.blocks.length>8||Math.abs(stats.minutes-session.minutes)>.15)throw Error('Etapas inválidas para exportação.');
   const steps=[];for(const b of w.blocks)for(let n=0;n<b.repeats;n++){
@@ -23,6 +22,7 @@ export function workoutRecipe(session,{warmupMinutes=5,cooldownMinutes=5}={}){
   }
   return {name:`DV ${workoutTypes[w.type]} ${session.date}`,date:session.date,km:session.km,warmupMinutes:w.blocks[0].minutes,cooldownMinutes:w.blocks.at(-1).minutes,steps,structured:true};
  }
+ for(const minutes of [warmupMinutes,cooldownMinutes])if(!Number.isInteger(minutes)||minutes<0||minutes>15)throw new Error('Use de 0 a 15 minutos inteiros para aquecer e desacelerar.');
  const steps=[];
  if(warmupMinutes)steps.push({name:'Aquecimento',durationType:0,value:warmupMinutes*60000,intensity:2,notes:'Caminhar ou trotar muito leve. Sem meta de ritmo.'});
  steps.push({name:'Corrida leve',durationType:1,value:Math.round(session.km*100000),intensity:0,notes:'Converse em frases completas. Caminhe se precisar.'});
