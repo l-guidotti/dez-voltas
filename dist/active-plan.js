@@ -33,3 +33,5 @@ export function replaceOwnerArchive(owner,raw){
  if(incoming.owner!==owner||incoming.plans.some(p=>p.owner!==owner))throw new Error('Arquivo de outra conta.');
  persist(validatePlanArchive({version:1,owner,plans:[...archive.plans.filter(p=>p.owner!==owner),...incoming.plans]}));
 }
+
+export function suggestionId(raw,owner){return planId(checkedSuggestion(raw),ownerId(owner));}

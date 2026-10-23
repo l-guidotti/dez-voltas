@@ -1,4 +1,4 @@
-import {validateAccountDocument} from '../dist/sync-contract.js';
+import {trainingStore} from './training-store.js';
 import {validateProfile,validateSuggestion,suggestionSchema,addDate,daysBetween} from '../dist/training-contract.js';
 const encoder=new TextEncoder();
 export class ApiError extends Error { constructor(status,message){super(message);this.status=status;} }
@@ -73,20 +73,10 @@ export async function handleApi(request,env){try{
     if(request.headers.get('origin')!==url.origin)throw new ApiError(403,'Origem não autorizada.');
     if(!env.APP_ORIGIN||env.APP_ORIGIN!==url.origin)throw new ApiError(503,'O domínio da aplicação ainda não foi configurado.');
   }
-  if(path==='/api/account/data'&&['GET','POST'].includes(request.method)){
-    const u=await user(request,env),access=cookies(request)['__Host-dv-access'];
-    const headers={apikey:env.SUPABASE_ANON_KEY,Authorization:'Bearer '+access,'content-type':'application/json'};
-    let endpoint=authConfig(env)+'/rest/v1/account_data?user_id=eq.'+encodeURIComponent(u.id)+'&select=revision,document,updated_at',options={headers,signal:AbortSignal.timeout(15000)};
-    if(request.method==='POST'){
-      const b=await bodyOf(request,2097152);if(!Number.isSafeInteger(b.revision)||b.revision<0)throw new ApiError(400,'Revisão inválida.');
-      let document;try{document=validateAccountDocument(b.document,u.id);}catch(e){throw new ApiError(400,e.message);}
-      endpoint=authConfig(env)+'/rest/v1/rpc/save_account_data';options={...options,method:'POST',body:JSON.stringify({expected_revision:b.revision,new_document:document})};
-    }
-    const response=await fetch(endpoint,options);
-    if(!response.ok)throw new ApiError(response.status===401?401:502,'Não foi possível sincronizar com o banco. Sua cópia local foi preservada.');
-    const rows=await response.json();
-    if(request.method==='POST'&&!rows.length)throw new ApiError(409,'Existem alterações em outro aparelho. Escolha qual cópia manter no Perfil.');
-    return json({record:rows[0]||null});
+  if(path==='/api/account/data')throw new ApiError(426,'Atualize o aplicativo para continuar a sincronização. Seus dados foram preservados.');
+  if(path==='/api/account/sync'&&['GET','POST'].includes(request.method)){
+    const u=await user(request,env);
+    return json(await trainingStore({request,env,user:u,access:cookies(request)['__Host-dv-access'],readBody:bodyOf,fail:(status,message)=>new ApiError(status,message)}));
   }
   if(path==='/api/auth/me'&&request.method==='GET'){
     authConfig(env);if(!cookies(request)['__Host-dv-access'])return json({user:null});const u=await user(request,env);return json({user:{id:u.id,email:u.email}});

@@ -34,13 +34,13 @@ npx wrangler@4 pages deploy dist --project-name dez-voltas --branch main
 
 Configure os bindings/segredos no painel antes e confirme a proteção de acesso. O projeto continua contendo o plano pessoal original; preserve a restrição Cloudflare Access enquanto ele estiver no pacote. A autenticação de novas contas não torna automaticamente adequado publicar os dados pessoais desse plano. Uma futura versão multiusuário deve tornar a experiência inicial genérica e isolar perfis no banco por usuário.
 
-O service worker não intercepta `/api/`; respostas de autenticação e sugestões usam `Cache-Control: no-store`. O cache da PWA foi atualizado para v11. Sessão tem duração de até uma hora; após expirar, solicite novo link. Renovação automática será uma melhoria posterior. No iPhone, abra o link no navegador que iniciou o acesso; Safari/PWA podem não compartilhar cookies. Se o link abrir em outro contexto, peça outro no Safari e continue nele.
+O service worker não intercepta `/api/`; respostas de autenticação e sugestões usam `Cache-Control: no-store`. O cache da PWA foi atualizado para v12. Sessão tem duração de até uma hora; após expirar, solicite novo link. Renovação automática será uma melhoria posterior. No iPhone, abra o link no navegador que iniciou o acesso; Safari/PWA podem não compartilhar cookies. Se o link abrir em outro contexto, peça outro no Safari e continue nele.
 
 ## Validação e limites da entrega
 
 Testes automatizados com Supabase e Gemini simulados verificam validações de perfil/resposta, isolamento dos dados enviados, autenticação, PKCE/cookies, origem, cota e falhas. Nenhum envio real de e-mail nem chamada Gemini foi feito: não há credenciais neste ambiente. Validar entrega/expiração do link e um ciclo real no iPhone após configurar as contas. Não foi realizado teste visual em navegador nesta etapa.
 
-Perfil, rascunho válido, sugestão, planos adotados e diário são persistidos por usuário em public.account_data no Supabase. A API usa o token do próprio usuário e RLS. O cliente mantém cópia local, envia alterações após cerca de um segundo e verifica atualizações ao focar, reconectar ou a cada minuto. Consulte BANCO-SUPABASE.md para conflitos, migração e limites.
+Perfil, rascunho válido, sugestão, planos adotados e diário são persistidos por usuário nas tabelas runner_profiles, training_plans, training_sessions e diary_entries no Supabase. A API usa o token do próprio usuário e RLS. O cliente mantém cópia local, envia alterações após cerca de um segundo e verifica atualizações ao focar, reconectar ou a cada minuto. Consulte BANCO-SUPABASE.md para conflitos, migração e limites.
 
 Referências: https://supabase.com/docs/guides/auth/auth-email-passwordless · https://supabase.com/docs/guides/auth/sessions/pkce-flow · https://supabase.com/docs/guides/auth/auth-smtp · https://ai.google.dev/gemini-api/docs/structured-output · https://ai.google.dev/gemini-api/terms
 
