@@ -28,7 +28,7 @@ export function validateReviewQuality(q){
  if(!q||typeof q!=='object'||!Array.isArray(q.allowedTypes)||q.allowedTypes.length>3||new Set(q.allowedTypes).size!==q.allowedTypes.length||q.allowedTypes.some(x=>!qualityTypes.includes(x))||!Number.isInteger(q.maxPeakRpe)||q.maxPeakRpe<4||q.maxPeakRpe>8||typeof q.maxHardMinutes!=='number'||q.maxHardMinutes<0||q.maxHardMinutes>20)throw Error('Limites de qualidade da revisão inválidos.');
  return {allowedTypes:[...q.allowedTypes],maxPeakRpe:q.maxPeakRpe,maxHardMinutes:q.maxHardMinutes};
 }
-const number=(x,min,max)=>{if(typeof x!=='number'||!Number.isFinite(x)||x<min||x>max)throw Error('Etapas do treino com valores inválidos.');return x;};
+const number=(x,min,max,field)=>{if(typeof x!=='number'||!Number.isFinite(x)||x<min||x>max)throw Error('Etapas do treino: '+field+' deve ficar entre '+min+' e '+max+'.');return x;};
 const text=(s,max)=>{if(typeof s!=='string'||!s.trim()||s.length>max)throw Error('Descrição do treino inválida.');return s;};
 export function workoutStats(w){let minutes=0,hardMinutes=0,peak=0;for(const b of w.blocks){minutes+=b.repeats*(b.minutes+b.recoveryMinutes);if(b.rpe>=5)hardMinutes+=b.minutes*b.repeats;peak=Math.max(peak,b.rpe,b.recoveryRpe);}return {minutes,hardMinutes,peak};}
 export function validateWorkout(raw,session,policy){
@@ -37,7 +37,7 @@ export function validateWorkout(raw,session,policy){
  if((raw.type==='long')!==session.long)throw Error('O tipo de sessão não corresponde à marcação de longo.');
  const blocks=raw.blocks.map((b,index)=>{
   if(!['warmup','work','cooldown'].includes(b.phase)||!Number.isInteger(b.repeats)||b.repeats<1||b.repeats>20||!Number.isInteger(b.rpe)||!Number.isInteger(b.recoveryRpe))throw Error('Etapa de treino inválida.');
-  const block={phase:b.phase,repeats:b.repeats,minutes:number(b.minutes,.25,600),rpe:number(b.rpe,1,policy.maxPeakRpe),recoveryMinutes:number(b.recoveryMinutes,0,10),recoveryRpe:number(b.recoveryRpe,1,3)};
+  const block={phase:b.phase,repeats:b.repeats,minutes:number(b.minutes,.25,600,'minutes'),rpe:number(b.rpe,1,policy.maxPeakRpe,'rpe'),recoveryMinutes:number(b.recoveryMinutes,0,10,'recoveryMinutes'),recoveryRpe:number(b.recoveryRpe,1,3,'recoveryRpe')};
   if(index===0&&b.phase!=='warmup'||index===raw.blocks.length-1&&b.phase!=='cooldown'||index>0&&index<raw.blocks.length-1&&b.phase!=='work')throw Error('Ordene aquecimento, parte principal e desaquecimento.');
   if(b.phase!=='work'&&(b.repeats!==1||b.recoveryMinutes!==0||b.rpe>3||b.minutes<(quality?(b.phase==='warmup'?10:5):1)))throw Error('Aquecimento ou desaquecimento incompatível com a sessão.');
   if(['easy','recovery'].includes(raw.type)&&b.phase==='work'&&(b.repeats!==1||b.recoveryMinutes!==0))throw Error('Rodagem e regenerativo devem ter parte principal contínua.');

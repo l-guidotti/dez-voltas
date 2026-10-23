@@ -95,3 +95,7 @@ const nested=JSON.stringify(wireSchema.properties.weeks.items);
 for(const keyword of ['minimum','maximum','minItems','maxItems','prefixItems'])assert.ok(!nested.includes('"'+keyword+'"'));
 assert.ok(wireSchema.properties.weeks.items.properties.sessions.items.required.includes('workout'));
 console.log('PASS: schema Gemini compacto sem duplicar semanas/etapas nem limites aninhados; validação semântica continua obrigatória.');
+
+const wireBlock=wireSchema.properties.weeks.items.properties.sessions.items.properties.workout.properties.blocks.items;
+assert.deepEqual(wireBlock.properties.recoveryRpe.enum,[1,2,3]);assert.ok(!wireBlock.properties.rpe.enum.includes(0));
+assert.ok(wireBlock.properties.rpe.enum.every(x=>x<=4));
