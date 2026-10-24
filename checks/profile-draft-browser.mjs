@@ -9,6 +9,7 @@ import {join,resolve,extname} from 'node:path';
 const root=resolve('dist'),temp=await mkdtemp(join(tmpdir(),'dez-draft-browser-'));
 let generationJob=null;
 let account={id:'browser-runner-a',email:'a@example.test'},cursor=0,syncs=0,posts=0;
+const dailyRows=new Map();let dailyWrites=0;
 const rows=new Map(),errors=[],pending=new Map();let chrome,ws,sequence=0;
 const server=createServer(async(req,res)=>{
  try{
@@ -18,6 +19,13 @@ const server=createServer(async(req,res)=>{
    if(path==='/api/auth/me')return res.end(JSON.stringify({user:account,session:{canRefresh:false}}));
    if(path==='/api/auth/logout'){account=null;return res.end('{}');}
    if(path==='/api/training/jobs')return res.end(JSON.stringify({job:generationJob,history:[]}));
+   if(path==='/api/recovery/daily'){
+    if(!account){res.statusCode=401;return res.end(JSON.stringify({error:'Entre na conta'}));}
+    if(req.method==='GET')return res.end(JSON.stringify({records:[...dailyRows.values()].filter(r=>r.owner===account.id)}));
+    let text='';for await(const chunk of req)text+=chunk;const body=JSON.parse(text),key=account.id+':'+body.day,old=dailyRows.get(key);
+    if((old?.revision||0)!==body.revision){res.statusCode=409;return res.end(JSON.stringify({error:'Conflito',record:old}));}
+    const record={day:body.day,report:body.report,revision:(old?.revision||0)+1,owner:account.id};dailyRows.set(key,record);dailyWrites++;return res.end(JSON.stringify({record}));
+   }
    if(path==='/api/account/sync'){
     syncs++;
     if(req.method==='POST'){let body='';for await(const chunk of req)body+=chunk;for(const row of JSON.parse(body).changes){rows.set(row.kind+':'+row.id,{...row,revision:row.revision+1});cursor++;}}
@@ -77,6 +85,26 @@ try{
  await until(()=>evaluate(`!!document.querySelector('#profile-goal [name="consent"]')`));
  assert.equal(await evaluate(`localStorage.getItem('dez-voltas-profile-edit-v1:browser-runner-a')`),null);
  assert.equal(await evaluate(`JSON.parse(localStorage.getItem('dez-voltas-draft-v1:browser-runner-a')).details.registrationCompleted`),true);
+ // Daily check-in is available without an adopted plan and without a running session.
+ await evaluate(`location.hash='#hoje'`);await until(()=>evaluate(`!!document.querySelector('#daily-checkin')`));
+ const fillDaily=async(name,value)=>evaluate(`(()=>{const details=document.querySelector('.daily-form-details');if(details)details.open=true;const n=document.querySelector('#daily-checkin [name="${name}"]');n.focus();n.value=${JSON.stringify(value)};n.dispatchEvent(new Event('input',{bubbles:true}));n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+ await fillDaily('fatigue','2');await fillDaily('sleep','4');await fillDaily('readiness','4');await fillDaily('pain','none');await fillDaily('notes','Recuperação sem corrida');
+ await evaluate(`window.dailyInput=document.querySelector('#daily-checkin [name="notes"]');dailyInput.setSelectionRange(4,4);window.dispatchEvent(new Event('focus'))`);await pause(150);
+ assert.equal(await evaluate('dailyInput.isConnected&&document.activeElement===dailyInput&&dailyInput.selectionStart===4'),true,'Daily fields must survive background sync');
+ if(process.env.DV_RECOVERY_SCREENSHOT){await evaluate(`document.querySelector('#daily-recovery-region').scrollIntoView()`);const shot=await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(process.env.DV_RECOVERY_SCREENSHOT,Buffer.from(shot.data,'base64'));}
+ await evaluate(`document.querySelector('#daily-checkin button[type="submit"]').click()`);await until(()=>evaluate(`document.querySelector('#daily-feedback')?.textContent.includes('sincronizados')`));
+ assert.equal(dailyWrites,1);assert.equal([...dailyRows.values()][0].report.activity.type,'none');
+ assert.equal(await evaluate(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`),true);
+ // Persist another daily entry change offline, then send that individual record after reconnecting.
+ await cdp('Network.enable');await cdp('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:-1,uploadThroughput:-1});
+ await fillDaily('fatigue','4');await evaluate(`document.querySelector('#daily-checkin button[type="submit"]').click()`);await pause(100);
+ assert.equal(dailyWrites,1);assert.equal(await evaluate(`Object.keys(JSON.parse(localStorage.getItem('dez-voltas-recovery-v1:browser-runner-a')).pending).length`),1);
+ await cdp('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});await evaluate(`window.dispatchEvent(new Event('online'))`);
+ await until(()=>evaluate(`document.querySelector('#daily-feedback')?.textContent.includes('sincronizados')`));assert.equal(dailyWrites,2);
+ assert.equal([...dailyRows.values()][0].report.fatigue,4);
+ await fillDaily('notes','Rascunho diário ainda não salvo');await cdp('Page.reload',{ignoreCache:true});await until(()=>evaluate(`!!document.querySelector('#daily-checkin')`));
+ assert.equal(await evaluate(`document.querySelector('#daily-checkin [name="notes"]').value`),'Rascunho diário ainda não salvo');
+ await evaluate(`location.hash='#perfil'`);await until(()=>evaluate(`!!document.querySelector('#profile-goal')`));
  // Inspect the actual comparison component at mobile size, including colors and week details.
  const makeComparisonPlan=(from,km,id)=>({id,owner:account.id,profile:{startDate:from,targetDate:'2027-05-01',...(id==='new'?{review:{sourcePlanId:'old'}}:{})},plan:{weeks:Array.from({length:4},(_,i)=>{const date=new Date(Date.parse(from+'T12:00:00Z')+i*7*86400000).toISOString().slice(0,10);return {start:date,sessions:[{date,km,minutes:km*6,rpe:id==='new'?4:3}]};})}});
  const comparisonSource=makeComparisonPlan('2027-01-04',20,'old'),comparisonNext=makeComparisonPlan('2027-01-11',25,'new');
@@ -100,5 +128,5 @@ try{
  await cdp('Page.reload',{ignoreCache:true});await until(()=>evaluate(`!!document.querySelector('#profile-goal')`));
  assert.equal(await evaluate(`${field('eventName')}.value`),'Edição ainda em andamento');
  assert.equal(posts,0);assert.deepEqual(errors,[]);
- console.log('PASS: comparação móvel com cores, diferenças semanais e sem rolagem horizontal. Chromium mobile 390×844: real sync keeps input/caret/scroll, focus/visibility/online, reload, goal/days, registration completion, logout and account isolation (local API fixtures).');
+ console.log('PASS: check-in diário sem treino/plano, edição preservada, offline/reconexão e rascunho após recarga. Comparação móvel com cores, diferenças semanais e sem rolagem horizontal. Chromium mobile 390×844: real sync keeps input/caret/scroll, focus/visibility/online, reload, goal/days, registration completion, logout and account isolation (local API fixtures).');
 }finally{ws?.close();chrome?.kill();await new Promise(r=>server.close(r));await rm(temp,{recursive:true,force:true,maxRetries:5,retryDelay:100});}

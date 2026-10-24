@@ -46,6 +46,7 @@ const jobId='00000000-0000-4000-8000-000000000001',lease='00000000-0000-4000-800
 globalThis.fetch=async(url,options={})=>{
  const body=options.body?JSON.parse(options.body):null;
  if(url.endsWith('/user'))return Response.json({id:owner,email:'private@example.com',email_confirmed_at:'2026-01-01'});
+ if(url.endsWith('/rpc/read_daily_recovery'))return Response.json([]);
  if(url.endsWith('/rpc/read_weekly_review')){assert.equal(options.headers.Authorization,'Bearer access');return Response.json({planId:ctx.sourcePlanId,weekStart:start,weekEnd:end});}
  if(url.endsWith('/rpc/save_weekly_review')){assert.equal(options.headers.Authorization,'Bearer access');assert.equal(body.plan_id,ctx.sourcePlanId);assert.equal(body.expected_revision,0);assert.deepEqual(body.report_data,report);return Response.json({id:'checkin',revision:1});}
  if(url.endsWith('/rpc/claim_ai_generation'))return Response.json({id:jobId,lease,kind:'weekly_review',profile:old,context:ctx});

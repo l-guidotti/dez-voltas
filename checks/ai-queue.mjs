@@ -7,6 +7,7 @@ globalThis.crypto??=webcrypto;
 const env={APP_ORIGIN:'https://example.com',SUPABASE_URL:'https://auth.example.com',SUPABASE_ANON_KEY:'publishable',GEMINI_API_KEY:'secret-key',GEMINI_MODEL:'gemini-3.5-flash-lite'};
 const profile=validateProfile({goal:'distance',target:10,startDate:localToday(),targetDate:addDate(localToday(),90),weeklyKm:10,longestKm:6,weeksConsistent:4,days:[0,2,4],maxMinutes:60,longMinutes:90,pain:'none',consent:true});
 const id=crypto.randomUUID(),lease=crypto.randomUUID(),runnerKey='a'.repeat(64),requestId=crypto.randomUUID();
+let recoveryAlert=false;
 let calls=[],providerStatus=200,finish='STOP',claim=true,failAck=false,finishBody,quota=false;
 const plan={summary:'Preparação gradual',feasibility:'Revisar conforme recuperação',warnings:[],phases:phaseCalendar(profile).map(()=>({title:'Base e recuperação',focus:'Reavaliar com o treino realizado'})),weeks:trainingCalendar(profile).map(w=>({start:w.start,totalKm:3,focus:'Corrida confortável',sessions:[{date:w.availableDates[0],title:'Rodagem',km:3,minutes:30,rpe:3,long:false,instructions:'Caminhe quando precisar.'}]}))};
 globalThis.fetch=async(url,options={})=>{
@@ -18,7 +19,7 @@ globalThis.fetch=async(url,options={})=>{
  }
  if(url.includes('/rpc/claim_ai_generation')){
   if(body.runner_key!==runnerKey)return Response.json({code:'42501'},{status:403});
-  return Response.json(claim?{id,lease,profile,attempts:1}:null);
+  return Response.json(claim?{id,lease,profile,attempts:1,recovery_alert:recoveryAlert}:null);
  }
  if(url.includes('/rpc/finish_ai_generation')){finishBody=body;return failAck?Response.json({message:'private database details'},{status:503}):Response.json(true);}
  if(url.includes('/rest/v1/ai_generation_jobs')){assert.equal(options.headers.Authorization,'Bearer access');return Response.json([{id,status:'completed',attempts:1,...(url.includes(',result')?{result:{profile,plan:easyWorkouts(plan)}}:{})}]);}
@@ -44,6 +45,8 @@ let before=calls.length;r=await handleApi(run(),env);assert.equal(r.status,403);
 r=await handleApi(run('b'.repeat(64)),env);assert.equal(r.status,403);assert.equal(calls.filter(c=>c.url.includes(':generateContent')).length,0);
 r=await handleApi(run(runnerKey),env);assert.equal(r.status,200);assert.equal((await r.json()).saved,true);assert.equal(finishBody.job_id,id);assert.equal(finishBody.job_lease,lease);assert.equal(finishBody.job_result.plan.weeks.length,4);assert.equal(finishBody.tokens_in,1200);assert.equal(finishBody.tokens_out,2600);assert.equal(finishBody.retryable,false);assert.equal(finishBody.job_error,null);
 assert.ok(!(await (await handleApi(run(runnerKey),env)).text()).includes('Preparação gradual'),'Runner response does not expose the result');
+recoveryAlert=true;before=calls.filter(c=>c.url.includes(':generateContent')).length;
+await handleApi(run(runnerKey),env);assert.equal(calls.filter(c=>c.url.includes(':generateContent')).length,before);assert.match(finishBody.job_error,/check-in diário/);assert.equal(finishBody.retryable,false);recoveryAlert=false;
 for(const [http,retry] of [[429,true],[503,true],[404,false],[400,false]]){providerStatus=http;r=await handleApi(run(runnerKey),env);assert.equal(r.status,200);assert.equal(finishBody.retryable,retry);assert.equal(finishBody.job_result,null);assert.ok(!finishBody.job_error.includes('private provider details'));}
 providerStatus=200;finish='MAX_TOKENS';await handleApi(run(runnerKey),env);assert.equal(finishBody.retryable,false);assert.equal(finishBody.tokens_out,2600,'Usage is counted even when the response is invalid');
 finish='STOP';failAck=true;r=await handleApi(run(runnerKey),env);assert.equal(r.status,503);assert.ok(!(await r.text()).includes('private database details'));failAck=false;
