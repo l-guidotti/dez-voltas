@@ -28,7 +28,7 @@ export async function pushApi({request,env,path,authenticate,access,rpc,bodyOf,f
  }
  if(request.method!=='POST')throw fail(405,'Método inválido.');
  const body=await bodyOf(request,6000);if(!uuidPattern.test(body.deviceId||''))throw fail(400,'Identificação do aparelho inválida.');
- if(path==='/api/push/test')return {queued:await rpc('test_push_device',{device_id:body.deviceId},token)};
+ if(path==='/api/push/test'){const config=await rpc('read_push_config',{},token);if(!config.ready||!config.enabled)throw fail(503,'O serviço de lembretes está indisponível. Tente novamente mais tarde.');return {queued:await rpc('test_push_device',{device_id:body.deviceId},token)};}
  if(body.disable===true){await rpc('remove_push_device',{device_id:body.deviceId},token);return {disabled:true};}
  let settings,subscription;try{settings=validatePushSettings(body.settings);subscription=validateSubscription(body.subscription);}catch(e){throw fail(400,e.message);}
  try{const key=decode64(subscription.keys.p256dh);if(key.length!==65||key[0]!==4||decode64(subscription.keys.auth).length!==16)throw Error();await crypto.subtle.importKey('raw',key,{name:'ECDH',namedCurve:'P-256'},false,[]);}catch{throw fail(400,'Chaves da assinatura de notificações inválidas.');}

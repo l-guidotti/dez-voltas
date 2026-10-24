@@ -29,14 +29,14 @@ function read(form){const f=new FormData(form);return validatePushSettings({trai
 export function refreshPushUI(force=false){const node=document.querySelector('#push-settings-region');if(!node)return;if(!force&&node.dataset.owner===owner&&pushSettingsEditing()){const feedback=document.querySelector('#push-feedback');if(feedback)feedback.textContent=message;return;}node.outerHTML=renderPushSettings(node.dataset.owner);}
 export async function refreshPushSettings(){
  const id=activeSyncOwner();if(id!==owner){operation++;const old=binding();owner=id;config=null;device=null;dirty=false;message='';if(old&&id&&old.owner!==id){try{await unsubscribeBrowser();}catch{}localStorage.removeItem(BINDING);}}
- if(!id||reading)return;reading=true;
- try{const data=await api(id);if(activeSyncOwner()!==id)return;config=data.config;device=data.device;
+ if(!id||reading||busy)return;const ticket=operation;reading=true;
+ try{const data=await api(id);if(activeSyncOwner()!==id||ticket!==operation)return;config=data.config;device=data.device;
   const registration='serviceWorker' in navigator?await navigator.serviceWorker.getRegistration():null;browserSubscribed=!!(await registration?.pushManager?.getSubscription());
   if(device?.enabled&&permission()==='denied'){await disconnectPushForLogout();message='Lembretes desativados porque a permissão foi bloqueada no aparelho.';}
- }catch(e){if(activeSyncOwner()===id)message='Sem acesso às preferências de lembretes. Tente novamente online.';}finally{reading=false;changed();}
+ }catch(e){if(activeSyncOwner()===id&&ticket===operation)message='Sem acesso às preferências de lembretes. Tente novamente online.';}finally{reading=false;changed();}
 }
 async function activate(settings){
- const id=activeSyncOwner(),ticket=operation;if(!id||id!==owner)throw Error('Entre na conta antes de ativar lembretes.');if(!settings.training&&!settings.diary)throw Error('Selecione ao menos um aviso, ou use Desativar neste aparelho.');
+ const id=activeSyncOwner(),ticket=++operation;if(!id||id!==owner)throw Error('Entre na conta antes de ativar lembretes.');if(!settings.training&&!settings.diary)throw Error('Selecione ao menos um aviso, ou use Desativar neste aparelho.');
  // The permission request is the first await, directly inside the user's click/submit gesture (Safari requirement).
  const granted=permission()==='granted'?'granted':await Notification.requestPermission();if(ticket!==operation||activeSyncOwner()!==id)throw Error('A conta mudou. Ative novamente na conta atual.');if(granted!=='granted')throw Error('Permissão não concedida. Você pode ativar as notificações quando quiser.');
  const registration=await navigator.serviceWorker.ready;if(activeSyncOwner()!==id||ticket!==operation)throw Error('A conta mudou. Ative novamente na conta atual.');

@@ -25,7 +25,7 @@ As notificações têm título e texto genéricos definidos pelo service worker,
 ## Implantação
 
 1. Aplicar `database/push-reminders.sql` (serviço inicialmente desativado, sem assinantes). Pode ser aplicado em transações por grupo de funções caso o cliente SQL limite o tamanho da requisição; manter CREATE/REVOKE/GRANT juntos.
-2. Publicar worker e PWA v26.
+2. Publicar worker e PWA v27.
 3. Executar `database/push-reminders-bootstrap.sql`: invoca o endpoint privado que gera e grava a chave sem expor o material.
 4. Confirmar apenas os indicadores `public_key is not null` / `private_key_id is not null`; não consultar valores privados.
 5. Executar `database/push-reminders-activate.sql` para ativar o serviço e o cron. Isso não inscreve ninguém automaticamente.
