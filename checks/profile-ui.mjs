@@ -1,3 +1,4 @@
+import {renderPlanComparison} from '../dist/plan-comparison.js';
 import {intensityPolicy,renderWorkout,workoutTypes} from '../dist/workout-contract.js';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
@@ -5,7 +6,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import {validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate} from '../dist/training-contract.js';
 const events={},windowEvents={},storage=new Map();
-const context=vm.createContext({intensityPolicy,renderWorkout,workoutTypes,crypto:webcrypto,sessionFetch:(...args)=>context.fetch(...args),configureAccountSync(){},activeSyncOwner:()=>'new-runner',connectAccount:async()=>{},accountChanged(){},syncMessage:()=>'Sincronizado',hasSyncConflict:()=>false,synchronize:async()=>{},resolveSync:async()=>{},replaceOwnerArchive(){},adoptSuggestion:(owner,result)=>{context.adopted={owner,result}},setPlanOwner(){},getActivePlan:()=>null,validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate,Intl,Date,URL,URLSearchParams,Blob,setTimeout,clearTimeout,AbortController,Event,requestAnimationFrame:fn=>fn(),document:{addEventListener:(type,callback)=>events[type]=callback,querySelector:()=>null},window:{addEventListener:(name,fn)=>windowEvents[name]=fn,dispatchEvent(){}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},fetch:async()=>{throw Error('offline')},location:{href:'https://example.com/#perfil'},history:{replaceState(){}}});
+const context=vm.createContext({renderPlanComparison,exportPlanArchive:()=>({plans:[]}),intensityPolicy,renderWorkout,workoutTypes,crypto:webcrypto,sessionFetch:(...args)=>context.fetch(...args),configureAccountSync(){},activeSyncOwner:()=>'new-runner',connectAccount:async()=>{},accountChanged(){},syncMessage:()=>'Sincronizado',hasSyncConflict:()=>false,synchronize:async()=>{},resolveSync:async()=>{},replaceOwnerArchive(){},adoptSuggestion:(owner,result)=>{context.adopted={owner,result}},setPlanOwner(){},getActivePlan:()=>null,validateProfile,validateStoredProfile,validateSuggestion,localToday,addDate,Intl,Date,URL,URLSearchParams,Blob,setTimeout,clearTimeout,AbortController,Event,requestAnimationFrame:fn=>fn(),document:{addEventListener:(type,callback)=>events[type]=callback,querySelector:()=>null},window:{addEventListener:(name,fn)=>windowEvents[name]=fn,dispatchEvent(){}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},fetch:async()=>{throw Error('offline')},location:{href:'https://example.com/#perfil'},history:{replaceState(){}}});
 vm.runInContext(fs.readFileSync('dist/profile.js','utf8').replace(/^import .*;\n/gm,'').replace(/export /g,''),context);
 let html=context.renderProfile();assert.ok(html.includes('Receber link de acesso'));assert.ok(!html.includes('id="profile-goal"'));assert.ok(html.includes('primeiro acesso'));
 vm.runInContext(`account={id:'uid-a',email:'<script>@example.com'}; authChecked=true;`,context);
@@ -129,3 +130,12 @@ context.fetch=async()=>Response.json({job:{id:'failed-test',status:'failed',atte
 await context.refreshJobs(true);html=context.renderProfile();
 assert.ok(html.lastIndexOf('Formato rejeitado pelo provedor.')>html.indexOf('Gerar sugestão com Gemini'));
 console.log('PASS: falha da fila aparece também junto ao botão de geração.');
+
+// Weekly proposals render their deterministic comparison before the adoption button.
+const comparisonSource={id:'ai-source',owner:'partial-a',active:true,profile:p,plan,generatedAt:'2026-01-01T00:00:00Z'};
+context.exportPlanArchive=()=>({owner:'partial-a',plans:[comparisonSource]});context.getActivePlan=()=>comparisonSource;
+const reviewed={profile:{...p,startDate:addDate(p.startDate,7),review:{sourcePlanId:'ai-source',weekStart:p.startDate,weekEnd:addDate(p.startDate,6),reason:'Rever carga'}},plan:{...plan,weeks:plan.weeks.map(w=>({...w,start:addDate(w.start,7),sessions:w.sessions.map(s=>({...s,date:addDate(s.date,7)}))}))},generatedAt:new Date().toISOString(),model:'test'};
+html=context.renderResult(reviewed);assert.ok(html.includes('O que muda no seu plano?'));
+assert.ok(html.indexOf('O que muda no seu plano?')<html.indexOf('data-profile="adopt"'));
+assert.ok(html.includes('21 dias comparáveis'));assert.ok(html.includes('7 de 28 dias'));
+console.log('PASS: comparação semanal integrada à sugestão, antes da decisão de adotar.');

@@ -71,3 +71,13 @@ O teste de transporte em produção usa uma conta temporária e dor informada pa
 ## Qualidade e tipos de sessão
 
 Sessões novas têm etapas estruturadas. A revisão pode preservar qualidade comprovada pelos registros dentro de limites de dose/pico e recuperação; não libera intensidade só porque houve adesão. Sono/fadiga do fechamento substituem os dados antigos. Consulte [INTENSIDADE.md](INTENSIDADE.md).
+
+## Comparação antes de adotar uma revisão semanal
+
+O resultado inclui um quadro “O que muda no seu plano?” com volume de corrida, minutos, RPE médio previsto ponderado pela duração e quantidade de sessões. Exibe valores anterior/novo, diferença absoluta e percentual para volume/tempo/sessões; RPE é comparado em pontos, sem percentual. O maior valor fica verde e o menor vermelho; texto e setas também indicam a direção. Cores indicam magnitude, sem classificar uma redução como pior preparação.
+
+O cálculo usa exclusivamente as datas detalhadas em comum com o plano de origem (`profile.review.sourcePlanId`) da mesma conta. Não compara a semana encerrada com semanas futuras nem transforma ausência de detalhamento em descanso. Há totais do período comum, detalhes por semana, aviso de comparação parcial e indicação dos dias excluídos. Sem fonte sincronizada ou sem datas em comum, explica a impossibilidade de calcular diferenças. Se o plano ativo mudou, identifica a revisão como antiga; se já foi adotada, mantém a comparação com a origem arquivada.
+
+Calculado no aparelho a partir das sessões, sem chamadas adicionais ao Gemini ou alterações no banco. Não altera planos, diário ou critérios de carga. Adoção continua sendo uma escolha explícita. Cache v24 inclui `plan-comparison.js` para funcionamento offline.
+
+Verificação: `checks/plan-comparison.mjs` cobre aumentos/reduções, datas comuns, semanas parciais, esforço ponderado, zeros/ausência, fonte de outra conta e histórico; `checks/profile-ui.mjs` verifica a presença antes do botão de adoção.

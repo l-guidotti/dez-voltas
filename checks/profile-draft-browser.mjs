@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {spawn} from 'node:child_process';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve,extname} from 'node:path';
 const root=resolve('dist'),temp=await mkdtemp(join(tmpdir(),'dez-draft-browser-'));
@@ -77,6 +77,18 @@ try{
  await until(()=>evaluate(`!!document.querySelector('#profile-goal [name="consent"]')`));
  assert.equal(await evaluate(`localStorage.getItem('dez-voltas-profile-edit-v1:browser-runner-a')`),null);
  assert.equal(await evaluate(`JSON.parse(localStorage.getItem('dez-voltas-draft-v1:browser-runner-a')).details.registrationCompleted`),true);
+ // Inspect the actual comparison component at mobile size, including colors and week details.
+ const makeComparisonPlan=(from,km,id)=>({id,owner:account.id,profile:{startDate:from,targetDate:'2027-05-01',...(id==='new'?{review:{sourcePlanId:'old'}}:{})},plan:{weeks:Array.from({length:4},(_,i)=>{const date=new Date(Date.parse(from+'T12:00:00Z')+i*7*86400000).toISOString().slice(0,10);return {start:date,sessions:[{date,km,minutes:km*6,rpe:id==='new'?4:3}]};})}});
+ const comparisonSource=makeComparisonPlan('2027-01-04',20,'old'),comparisonNext=makeComparisonPlan('2027-01-11',25,'new');
+ await evaluate(`(async()=>{const {renderPlanComparison}=await import('/plan-comparison.js');document.querySelector('#profile-result-region').innerHTML='<section class="panel profile-result">'+renderPlanComparison(${JSON.stringify(comparisonNext)},${JSON.stringify({owner:account.id,plans:[comparisonSource],activePlan:comparisonSource})})+'</section>';document.querySelector('.plan-comparison').scrollIntoView();})()`);
+ assert.equal(await evaluate(`document.querySelector('.plan-comparison').textContent.includes('Aumento de 15 km')`),true);
+ assert.equal(await evaluate(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`),true,'Comparison must fit a mobile screen');
+ assert.equal(await evaluate(`getComputedStyle(document.querySelector('.compare-higher')).color`),'rgb(34, 95, 57)');
+ assert.equal(await evaluate(`getComputedStyle(document.querySelector('.compare-lower')).color`),'rgb(154, 48, 42)');
+ await evaluate(`document.querySelector('.plan-compare-weeks summary').click()`);
+ assert.equal(await evaluate(`document.querySelector('.plan-compare-weeks').open`),true);
+ assert.equal(await evaluate(`document.querySelector('.plan-compare-week').textContent.includes('Aumento de 5 km')`),true);
+ if(process.env.DV_COMPARISON_SCREENSHOT){const shot=await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(process.env.DV_COMPARISON_SCREENSHOT,Buffer.from(shot.data,'base64'));}
  // New partial edits on a completed account survive logout, remain private and resume after login.
  await fill('eventName','Edição ainda em andamento');await evaluate(`document.querySelector('[data-profile="logout"]').click()`);
  await until(()=>evaluate(`!document.querySelector('#profile-goal')`));
@@ -88,5 +100,5 @@ try{
  await cdp('Page.reload',{ignoreCache:true});await until(()=>evaluate(`!!document.querySelector('#profile-goal')`));
  assert.equal(await evaluate(`${field('eventName')}.value`),'Edição ainda em andamento');
  assert.equal(posts,0);assert.deepEqual(errors,[]);
- console.log('PASS: Chromium mobile 390×844: real sync keeps input/caret/scroll, focus/visibility/online, reload, goal/days, registration completion, logout and account isolation (local API fixtures).');
+ console.log('PASS: comparação móvel com cores, diferenças semanais e sem rolagem horizontal. Chromium mobile 390×844: real sync keeps input/caret/scroll, focus/visibility/online, reload, goal/days, registration completion, logout and account isolation (local API fixtures).');
 }finally{ws?.close();chrome?.kill();await new Promise(r=>server.close(r));await rm(temp,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
