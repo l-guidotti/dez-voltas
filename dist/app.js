@@ -1,3 +1,4 @@
+import {initPushSettings,refreshPushUI,pushSettingsEditing} from './push-settings.js';
 import {renderDailyRecovery,initDailyRecovery,refreshRecoveryUI,dailyRecoveryEditing} from './daily-recovery.js';
 import {workoutTypes,renderWorkout} from './workout-contract.js';
 import {renderWeeklyReview,initWeeklyReview} from './weekly-review.js';
@@ -115,9 +116,10 @@ render();connection();setInterval(updateTimer,500);
 async function offline(){if(!('serviceWorker' in navigator)){$('#offline-status').textContent='Acesso offline indisponível neste navegador';return;}try{await navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'});await navigator.serviceWorker.ready;$('#offline-status').textContent='Plano disponível offline';}catch{$('#offline-status').textContent='Offline ainda indisponível · tente recarregar online';}}
 offline();
 
+window.addEventListener('push-settings-change',event=>{if(route==='perfil')refreshPushUI(event.force);});
 window.addEventListener('daily-recovery-change',()=>{if(route==='hoje')refreshRecoveryUI(state.logs);});
 window.addEventListener('weekly-review-change',()=>{if(location.hash==='#plano')render();});
-window.addEventListener('profile-change',event=>{const actions=document.querySelector('#account-actions');if(actions)actions.innerHTML=renderAccountActions();if(event.background&&profileEditing()&&document.querySelector('#profile-goal')?.dataset.owner===event.owner)return;if(location.hash==='#perfil'||needsRegistration())render();});
+window.addEventListener('profile-change',event=>{const actions=document.querySelector('#account-actions');if(actions)actions.innerHTML=renderAccountActions();if(event.background&&(profileEditing()||pushSettingsEditing())&&document.querySelector('#profile-goal')?.dataset.owner===event.owner)return;if(location.hash==='#perfil'||needsRegistration())render();});
 window.addEventListener('active-plan-change',()=>{if(route==='hoje'&&dailyRecoveryEditing()){refreshRecoveryUI(state.logs);return;}if(location.hash!=='#perfil'&&!needsRegistration())render();});
 configureAccountSync({
  capture(owner){const archive=exportPlanArchive();const owned=archive.plans.filter(p=>p.owner===owner),ids=new Set([...SESSIONS,...allGeneratedSessions({plans:owned})].map(s=>s.id));return {version:1,draft:JSON.parse(localStorage.getItem('dez-voltas-draft-v1:'+owner)||'null'),profile:JSON.parse(localStorage.getItem('dez-voltas-profile-v1:'+owner)||'null'),archive:{version:1,owner,plans:owned},state:{...state,logs:Object.fromEntries(Object.entries(state.logs).filter(([id])=>ids.has(id))),timer:null}};},
@@ -137,6 +139,7 @@ configureAccountSync({
  disconnect(){state={version:1,logs:{},checklist:{},timer:null};localStorage.setItem(KEY,JSON.stringify(state));window.dispatchEvent(new Event('active-plan-change'));}
 });
 resumeAccountSync();
+initPushSettings();
 initDailyRecovery();
 initWeeklyReview();
 initProfile();

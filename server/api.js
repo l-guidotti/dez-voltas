@@ -1,3 +1,4 @@
+import {pushApi} from './push-api.js';
 import {validateRecovery,recoveryDay,recoveryRecord,recoverySummary} from '../dist/recovery-contract.js';
 import {intensityPolicy,workoutSchema} from '../dist/workout-contract.js';
 import {prepareWeeklyReview,validateWeeklyCheckin} from '../dist/weekly-contract.js';
@@ -90,8 +91,8 @@ async function geminiError(response,model){
 }
 async function queueResponse(response){
  const data=await response.json();if(response.ok)return data;
- const messages={USER_DAILY_LIMIT:'Você atingiu o limite de 5 solicitações hoje. Tente amanhã (limite renovado à meia-noite UTC).',QUEUE_PAUSED:'A geração está pausada temporariamente. Seu plano anterior foi preservado.',QUEUE_FULL:'A fila está cheia. Tente novamente mais tarde.'};
- if(messages[data?.message])throw new ApiError(data.message==='QUEUE_PAUSED'?503:429,messages[data.message]);
+ const messages={PUSH_NOT_READY:'O serviço de lembretes ainda não está pronto neste aparelho.',PUSH_DEVICE_LIMIT:'Limite de cinco aparelhos por conta atingido. Desative um aparelho antes de adicionar outro.',PUSH_DEVICE_IN_USE:'Esta assinatura já está vinculada. Desative as notificações no navegador e ative novamente.',PUSH_TEST_LIMIT:'Limite de testes atingido. Aguarde até amanhã para enviar outro teste.',USER_DAILY_LIMIT:'Você atingiu o limite de 5 solicitações hoje. Tente amanhã (limite renovado à meia-noite UTC).',QUEUE_PAUSED:'A geração está pausada temporariamente. Seu plano anterior foi preservado.',QUEUE_FULL:'A fila está cheia. Tente novamente mais tarde.'};
+ if(messages[data?.message])throw new ApiError(['QUEUE_PAUSED','PUSH_NOT_READY'].includes(data.message)?503:data.message==='PUSH_DEVICE_IN_USE'?409:429,messages[data.message]);
  if(data?.code==='42501')throw new ApiError(403,'Acesso não autorizado à fila.');
  if(data?.code==='40001')throw new ApiError(409,'O fechamento foi alterado em outro aparelho. Atualize antes de salvar.');
  if(data?.message==='WEEK_NOT_READY')throw new ApiError(409,'A semana ainda não terminou ou o plano mudou. Atualize a tela.');
@@ -140,11 +141,13 @@ async function runQueuedGeneration(request,env){
 }
 export async function handleApi(request,env){try{
   const url=new URL(request.url),path=url.pathname;
+  if(path.startsWith('/api/internal/push-')){const result=await pushApi({request,env,path,rpc:(name,body)=>queueRpc(env,name,body),fail:(s,m)=>new ApiError(s,m)});if(result)return json(result);}
   if(path==='/api/internal/ai-runner'&&request.method==='POST')return json(await runQueuedGeneration(request,env));
   if(request.method==='POST'){
     if(request.headers.get('origin')!==url.origin)throw new ApiError(403,'Origem não autorizada.');
     if(!env.APP_ORIGIN||env.APP_ORIGIN!==url.origin)throw new ApiError(503,'O domínio da aplicação ainda não foi configurado.');
   }
+  if(path.startsWith('/api/push/')){const result=await pushApi({request,env,path,authenticate:()=>user(request,env),access:()=>cookies(request)['__Host-dv-access'],rpc:(name,body,access)=>queueRpc(env,name,body,access),bodyOf,fail:(s,m)=>new ApiError(s,m)});if(result)return json(result);}
   if(path==='/api/recovery/daily'&&['GET','POST'].includes(request.method)){
     await user(request,env);const access=cookies(request)['__Host-dv-access'];
     if(request.method==='GET')return json({records:(await queueRpc(env,'read_daily_recovery',{},access)).map(recoveryRecord)});

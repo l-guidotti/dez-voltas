@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import fs from 'node:fs';
+import {validatePushSettings} from '../dist/push-contract.js';
+const events={},storage=new Map();let resolvePermission,posts=0,unsubscribeCount=0;
+const subscription={unsubscribe:async()=>{unsubscribeCount++}};
+const registration={pushManager:{getSubscription:async()=>null,subscribe:async()=>subscription}};
+const context=vm.createContext({validatePushSettings,activeSyncOwner:()=>'owner-a',sessionFetch:async(path,options)=>{if(options.method==='POST')posts++;return Response.json({config:{ready:true,enabled:true,publicKey:'public'},device:null});},Notification:{permission:'default',requestPermission:()=>new Promise(r=>resolvePermission=r)},PushManager:class{},navigator:{userAgent:'Chrome',platform:'Linux',maxTouchPoints:0,serviceWorker:{getRegistration:async()=>registration,ready:Promise.resolve(registration)}},window:{matchMedia:()=>({matches:false}),addEventListener(){},dispatchEvent(){}},document:{activeElement:null,querySelector:()=>null,addEventListener:(name,fn)=>events[name]=fn},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},FormData:class{get(name){return {training:'on',diary:'on',trainingTime:'07:00',diaryTime:'20:00'}[name]}},Event,Intl,Date,AbortSignal,Error,URL,encodeURIComponent,setTimeout,clearTimeout});
+vm.runInContext(fs.readFileSync('dist/push-settings.js','utf8').replace(/^import .*;\n/gm,'').replace(/export /g,''),context);
+await context.refreshPushSettings();assert.equal(resolvePermission,undefined,'Opening settings must never prompt permission');
+const pending=events.submit({target:{id:'push-preferences'},preventDefault(){}});assert.equal(typeof resolvePermission,'function');
+await context.disconnectPushForLogout();resolvePermission('granted');await pending;
+assert.equal(posts,0,'A late permission result after logout must never register a subscription');
+context.Notification.permission='denied';assert.match(context.renderPushSettings('owner-a'),/notificações estão bloqueadas/);
+console.log('PASS: permission is user-triggered, logout cancels activation in flight and blocked permission is explained.');

@@ -32,3 +32,5 @@
 .daily-recovery{margin:0 0 24px}.daily-recovery>h2{font-family:Georgia,serif;font-size:28px;font-weight:400;margin:14px 0}.daily-recovery>p{line-height:1.7}.daily-recovery .daily-date{max-width:260px;margin:18px 0}.daily-recovery .field{margin-bottom:12px}.daily-activity{border:1px solid var(--line);border-radius:12px;padding:16px;margin:18px 0}.daily-activity>summary,.daily-history>summary{font-weight:650;cursor:pointer;line-height:1.6}.daily-activity-fields[hidden],.daily-conflict[hidden],.daily-pain[hidden]{display:none}.daily-history{margin-top:18px}.daily-history button{display:block;margin-top:10px}.daily-conflict button{margin:6px 6px 0 0}
 
 .daily-form-details>summary{cursor:pointer;font-weight:650;padding:12px 0;line-height:1.6}.daily-form-details[open]>summary{margin-bottom:14px}
+
+.push-settings{margin-bottom:24px}.push-settings h2{font-family:Georgia,serif;font-size:27px;font-weight:400}.push-settings>p{line-height:1.7}.push-settings .field{max-width:290px;margin:16px 0}.push-current{font-weight:650}

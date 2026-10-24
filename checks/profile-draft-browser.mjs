@@ -9,7 +9,7 @@ import {join,resolve,extname} from 'node:path';
 const root=resolve('dist'),temp=await mkdtemp(join(tmpdir(),'dez-draft-browser-'));
 let generationJob=null;
 let account={id:'browser-runner-a',email:'a@example.test'},cursor=0,syncs=0,posts=0;
-const dailyRows=new Map();let dailyWrites=0;
+const dailyRows=new Map(),pushDevices=new Map();let dailyWrites=0,pushTests=0;
 const rows=new Map(),errors=[],pending=new Map();let chrome,ws,sequence=0;
 const server=createServer(async(req,res)=>{
  try{
@@ -19,6 +19,13 @@ const server=createServer(async(req,res)=>{
    if(path==='/api/auth/me')return res.end(JSON.stringify({user:account,session:{canRefresh:false}}));
    if(path==='/api/auth/logout'){account=null;return res.end('{}');}
    if(path==='/api/training/jobs')return res.end(JSON.stringify({job:generationJob,history:[]}));
+   if(path==='/api/push/settings'){
+    const config={ready:true,enabled:true,publicKey:'BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8'};
+    if(req.method==='GET'){const id=new URL(req.url,'http://localhost').searchParams.get('deviceId');return res.end(JSON.stringify({config,device:pushDevices.get(id)||null}));}
+    let text='';for await(const chunk of req)text+=chunk;const body=JSON.parse(text);if(body.disable){pushDevices.delete(body.deviceId);return res.end(JSON.stringify({disabled:true}));}
+    const device={id:body.deviceId,enabled:true,settings:body.settings};pushDevices.set(device.id,device);return res.end(JSON.stringify({device}));
+   }
+   if(path==='/api/push/test'){pushTests++;return res.end(JSON.stringify({queued:true}));}
    if(path==='/api/recovery/daily'){
     if(!account){res.statusCode=401;return res.end(JSON.stringify({error:'Entre na conta'}));}
     if(req.method==='GET')return res.end(JSON.stringify({records:[...dailyRows.values()].filter(r=>r.owner===account.id)}));
@@ -50,7 +57,17 @@ try{
  const port=(await readFile(join(temp,'DevToolsActivePort'),'utf8')).split('\n')[0];const targets=await(await fetch('http://127.0.0.1:'+port+'/json/list')).json();
  ws=new WebSocket(targets.find(t=>t.type==='page').webSocketDebuggerUrl);await new Promise(r=>ws.addEventListener('open',r,{once:true}));
  ws.addEventListener('message',event=>{const message=JSON.parse(event.data);if(message.id){const entry=pending.get(message.id);pending.delete(message.id);if(message.error)entry.reject(message.error);else entry.resolve(message.result);}else if(message.method==='Runtime.exceptionThrown')errors.push(message.params.exceptionDetails.text);});
- await cdp('Runtime.enable');await cdp('Page.enable');await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:3,mobile:true});
+ await cdp('Runtime.enable');await cdp('Page.enable'); await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`
+ window.__permissionRequests=0;window.__pushPermission='default';
+ if(window.Notification&&window.PushManager){
+ Object.defineProperty(Notification,'permission',{configurable:true,get:()=>window.__pushPermission});
+ Notification.requestPermission=async()=>{window.__permissionRequests++;window.__pushPermission='granted';return 'granted';};
+ const subscription=()=>({endpoint:'https://web.push.apple.com/local-browser-fixture',keys:{p256dh:'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4',auth:'BTBZMqHH6r4Tts7J_aSIgg'},toJSON(){return {endpoint:this.endpoint,keys:this.keys};},async unsubscribe(){localStorage.removeItem('__push_test_active');return true;}});
+ PushManager.prototype.getSubscription=async()=>localStorage.getItem('__push_test_active')?subscription():null;
+ PushManager.prototype.subscribe=async()=>{localStorage.setItem('__push_test_active','true');return subscription();};
+ }
+ `});
+await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:3,mobile:true});
  await cdp('Page.navigate',{url:origin+'/#perfil'});await until(()=>evaluate(`!!document.querySelector('#profile-goal')`));
  await until(()=>evaluate(`document.querySelector('#account-sync-message')?.textContent==='Sincronizado com sua conta.'`));
  await fill('target','21.1');await fill('eventName','Minha meia no celular');
@@ -85,6 +102,14 @@ try{
  await until(()=>evaluate(`!!document.querySelector('#profile-goal [name="consent"]')`));
  assert.equal(await evaluate(`localStorage.getItem('dez-voltas-profile-edit-v1:browser-runner-a')`),null);
  assert.equal(await evaluate(`JSON.parse(localStorage.getItem('dez-voltas-draft-v1:browser-runner-a')).details.registrationCompleted`),true);
+ // Permission is requested only by the user's activation action; no live push service is used.
+ await until(()=>evaluate(`!!document.querySelector('#push-preferences button[type="submit"]:not([disabled])')`));
+ assert.equal(await evaluate('window.__permissionRequests'),0);
+ await evaluate(`document.querySelector('#push-preferences button[type="submit"]').click()`);
+ await until(()=>evaluate(`!!document.querySelector('[data-push="test"]')`));assert.equal(await evaluate('window.__permissionRequests'),1);
+ await evaluate(`document.querySelector('[data-push="test"]').click()`);await until(()=>evaluate(`document.querySelector('#push-feedback')?.textContent.includes('Teste na fila')`));assert.equal(pushTests,1);
+ await evaluate(`document.querySelector('[data-push="disable"]').click()`);await until(()=>evaluate(`document.querySelector('#push-feedback')?.textContent.includes('desativados')`));assert.equal(pushDevices.size,0);
+
  // Daily check-in is available without an adopted plan and without a running session.
  await evaluate(`location.hash='#hoje'`);await until(()=>evaluate(`!!document.querySelector('#daily-checkin')`));
  const fillDaily=async(name,value)=>evaluate(`(()=>{const details=document.querySelector('.daily-form-details');if(details)details.open=true;const n=document.querySelector('#daily-checkin [name="${name}"]');n.focus();n.value=${JSON.stringify(value)};n.dispatchEvent(new Event('input',{bubbles:true}));n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
