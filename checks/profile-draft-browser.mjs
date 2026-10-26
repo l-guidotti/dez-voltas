@@ -64,7 +64,7 @@ try{
  Notification.requestPermission=async()=>{window.__permissionRequests++;window.__pushPermission='granted';return 'granted';};
  const subscription=()=>({endpoint:'https://web.push.apple.com/local-browser-fixture',keys:{p256dh:'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4',auth:'BTBZMqHH6r4Tts7J_aSIgg'},toJSON(){return {endpoint:this.endpoint,keys:this.keys};},async unsubscribe(){localStorage.removeItem('__push_test_active');return true;}});
  PushManager.prototype.getSubscription=async()=>localStorage.getItem('__push_test_active')?subscription():null;
- PushManager.prototype.subscribe=async()=>{localStorage.setItem('__push_test_active','true');return subscription();};
+ PushManager.prototype.subscribe=async()=>{window.__permissionRequests++;window.__pushPermission='granted';localStorage.setItem('__push_test_active','true');return subscription();};
  }
  `});
 await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:3,mobile:true});
