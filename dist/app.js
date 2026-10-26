@@ -117,7 +117,7 @@ async function offline(){if(!('serviceWorker' in navigator)){$('#offline-status'
 offline();
 
 window.addEventListener('push-settings-change',event=>{if(route==='perfil')refreshPushUI(event.force);});
-window.addEventListener('daily-recovery-change',()=>{if(route==='hoje')refreshRecoveryUI(state.logs);});
+window.addEventListener('daily-recovery-change',event=>{if(route==='hoje')refreshRecoveryUI(state.logs,event.forceDaily===true);});
 window.addEventListener('weekly-review-change',()=>{if(location.hash==='#plano')render();});
 window.addEventListener('profile-change',event=>{const actions=document.querySelector('#account-actions');if(actions)actions.innerHTML=renderAccountActions();if(event.background&&(profileEditing()||pushSettingsEditing())&&document.querySelector('#profile-goal')?.dataset.owner===event.owner)return;if(location.hash==='#perfil'||needsRegistration())render();});
 window.addEventListener('active-plan-change',()=>{if(route==='hoje'&&dailyRecoveryEditing()){refreshRecoveryUI(state.logs);return;}if(location.hash!=='#perfil'&&!needsRegistration())render();});

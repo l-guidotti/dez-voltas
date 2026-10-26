@@ -36,3 +36,7 @@ Regras de prudência desta versão, sem pretensão de validação clínica:
 4. Executar `checks/recovery.sql` (fixtures com rollback), verificações de segurança e teste do snapshot do agendador com rollback. Nenhum teste do banco despacha jobs nem chama o Gemini real.
 
 `npm test` inclui validação de campos, consentimento, decisões semanais, offline, reabertura, resposta perdida, edição em voo, conflito, isolamento e API. `checks/profile-draft-browser.mjs` cobre o formulário real em Chromium móvel, sem plano/treino, preservação de foco, salvamento offline, reconexão e rascunho após recarga. Cache v25 inclui os três módulos novos. Testes locais usam provedores simulados; conferir Safari/PWA no iPhone no piloto.
+
+## Consulta dos registros salvos
+
+Em Hoje, “Seus check-ins salvos” mostra cada data em um cartão expansível, com disposição, fadiga, sono, dor/local, doença, atividade extra e observações. O histórico é independente do formulário de preenchimento e informa pendências/conflitos. “Editar este dia” abre explicitamente o registro no formulário, preservando os rascunhos de outras datas. Salvamento e troca explícita de data atualizam a tela mesmo com foco no formulário; sincronizações em segundo plano continuam preservando os campos em edição. O endpoint continua limitado aos últimos 28 dias, sem migração ou exclusão de dados.

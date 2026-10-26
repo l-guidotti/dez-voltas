@@ -119,14 +119,33 @@ await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScale
  if(process.env.DV_RECOVERY_SCREENSHOT){await evaluate(`document.querySelector('#daily-recovery-region').scrollIntoView()`);const shot=await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(process.env.DV_RECOVERY_SCREENSHOT,Buffer.from(shot.data,'base64'));}
  await evaluate(`document.querySelector('#daily-checkin button[type="submit"]').click()`);await until(()=>evaluate(`document.querySelector('#daily-feedback')?.textContent.includes('sincronizados')`));
  assert.equal(dailyWrites,1);assert.equal([...dailyRows.values()][0].report.activity.type,'none');
+ // Saving with focus still inside the form must reveal the saved record immediately.
+ assert.equal(await evaluate(`document.querySelectorAll('.daily-history-entry').length`),1);
+ assert.match(await evaluate(`document.querySelector('.daily-history-entry').textContent`),/Recuperação sem corrida/);
+ await evaluate(`document.querySelector('.daily-history-entry').open=true;window.dispatchEvent(new Event('focus'))`);await pause(150);
+ assert.equal(await evaluate(`document.querySelector('.daily-history-entry').open`),true,'Reading history survives background refresh');
+ // Explicit date changes must replace fields despite the input retaining focus.
+ const originalDay=await evaluate(`document.querySelector('#daily-checkin [name="day"]').value`);
+ const priorDay=new Date(Date.parse(originalDay+'T12:00:00Z')-86400000).toISOString().slice(0,10);
+ await fillDaily('day',priorDay);
+ assert.equal(await evaluate(`document.querySelector('#daily-checkin [name="notes"]').value`),'');
+ await fillDaily('fatigue','1');await fillDaily('sleep','5');await fillDaily('readiness','5');await fillDaily('pain','none');await fillDaily('notes','Ontem: descanso <seguro> & recuperação');
+ await evaluate(`document.querySelector('#daily-checkin button[type="submit"]').click()`);await until(()=>evaluate(`document.querySelector('#daily-feedback')?.textContent.includes('sincronizados')`));
+ assert.equal(await evaluate(`document.querySelectorAll('.daily-history-entry').length`),2);
+ assert.match(await evaluate(`document.querySelector('[data-record-day="${priorDay}"]').textContent`),/Ontem: descanso <seguro> & recuperação/);
+ assert.equal(await evaluate(`document.querySelector('.daily-history-entry seguro')`),null,'Notes must remain escaped');
+ await evaluate(`document.querySelector('[data-record-day="${originalDay}"] [data-recovery="day"]').click()`);
+ assert.equal(await evaluate(`document.querySelector('#daily-checkin [name="day"]').value`),originalDay);
+ assert.equal(await evaluate(`document.querySelector('#daily-checkin [name="notes"]').value`),'Recuperação sem corrida');
+
  assert.equal(await evaluate(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`),true);
  // Persist another daily entry change offline, then send that individual record after reconnecting.
  await cdp('Network.enable');await cdp('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:-1,uploadThroughput:-1});
  await fillDaily('fatigue','4');await evaluate(`document.querySelector('#daily-checkin button[type="submit"]').click()`);await pause(100);
- assert.equal(dailyWrites,1);assert.equal(await evaluate(`Object.keys(JSON.parse(localStorage.getItem('dez-voltas-recovery-v1:browser-runner-a')).pending).length`),1);
+ assert.equal(dailyWrites,2);assert.equal(await evaluate(`Object.keys(JSON.parse(localStorage.getItem('dez-voltas-recovery-v1:browser-runner-a')).pending).length`),1);
  await cdp('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});await evaluate(`window.dispatchEvent(new Event('online'))`);
- await until(()=>evaluate(`document.querySelector('#daily-feedback')?.textContent.includes('sincronizados')`));assert.equal(dailyWrites,2);
- assert.equal([...dailyRows.values()][0].report.fatigue,4);
+ await until(()=>evaluate(`document.querySelector('#daily-feedback')?.textContent.includes('sincronizados')`));assert.equal(dailyWrites,3);
+ assert.equal(dailyRows.get(account.id+':'+originalDay).report.fatigue,4);
  await fillDaily('notes','Rascunho diário ainda não salvo');await cdp('Page.reload',{ignoreCache:true});await until(()=>evaluate(`!!document.querySelector('#daily-checkin')`));
  assert.equal(await evaluate(`document.querySelector('#daily-checkin [name="notes"]').value`),'Rascunho diário ainda não salvo');
  await evaluate(`location.hash='#perfil'`);await until(()=>evaluate(`!!document.querySelector('#profile-goal')`));

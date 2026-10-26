@@ -34,3 +34,5 @@
 .daily-form-details>summary{cursor:pointer;font-weight:650;padding:12px 0;line-height:1.6}.daily-form-details[open]>summary{margin-bottom:14px}
 
 .push-settings{margin-bottom:24px}.push-settings h2{font-family:Georgia,serif;font-size:27px;font-weight:400}.push-settings>p{line-height:1.7}.push-settings .field{max-width:290px;margin:16px 0}.push-current{font-weight:650}
+
+.daily-history h3{font-size:18px}.daily-history-entry{border:1px solid var(--line);border-radius:12px;padding:14px;margin:10px 0}.daily-history-entry summary{cursor:pointer;font-weight:650;line-height:1.6}.daily-history-entry dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px 14px;font-size:14px;line-height:1.6}.daily-history-entry dt{color:var(--muted)}.daily-history-entry dd{margin:0;overflow-wrap:anywhere}.daily-history-notes{white-space:pre-wrap}
