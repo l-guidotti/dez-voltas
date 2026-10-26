@@ -41,3 +41,9 @@ Referências: https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipa
 O service worker é preparado antes de habilitar o botão. O toque chama `pushManager.subscribe` diretamente, sem aguardar `Notification.requestPermission`, `serviceWorker.ready` ou `getSubscription` antes: o próprio subscribe solicita a permissão nativa, mantendo a ação ligada ao gesto do usuário. A tela mostra autorização/conexão e gravação na conta, desabilita ações concorrentes e termina com sucesso ou erro. A assinatura tem espera máxima de 45 segundos; consulta/preparação do service worker também têm limites. Uma resposta posterior ao limite não grava silenciosamente no servidor. Falhas de permissão indicam Ajustes → Notificações e abertura pelo ícone instalado. Não se pede permissão automaticamente ao abrir o app.
 
 Testes simulam uma inscrição que só pode começar dentro do gesto, sucesso, ausência de worker, autorização atrasada após logout e espera expirada. O teste de Chromium móvel continua usando serviço simulado. A entrega real depende de confirmação no iPhone; o estado “Teste na fila” não confirma entrega.
+
+## Instalação no Cloudflare Pages (v30)
+
+O Pages redireciona `/index.html` para `/`. O cache inicial inclui apenas a URL canônica `/`: colocar também `/index.html` e rejeitar respostas redirecionadas abortava a instalação do service worker, deixando `ready` pendente e impedindo o push. O cache possui agora 28 recursos. Mantemos a rejeição de redirecionamentos inesperados para os demais recursos. A navegação offline tanto de `/` quanto de `/index.html` continua usando o HTML canônico.
+
+O teste de regressão recusa qualquer tentativa de cachear o alias. O servidor do teste Chromium reproduz o 308 do Cloudflare e exige um worker ativo antes da ativação de push. Falha na preparação passa a oferecer “Tentar preparar notificações novamente”, sem apagar dados ou pedir permissão automaticamente.

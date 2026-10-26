@@ -40,6 +40,7 @@ const server=createServer(async(req,res)=>{
    }
    posts++;res.statusCode=400;return res.end(JSON.stringify({error:'Unexpected API call'}));
   }
+  if(path==='/index.html'){res.writeHead(308,{location:'/'});return res.end();}
   const file=resolve(root,'.'+(path==='/'?'/index.html':path));if(!file.startsWith(root+'/'))throw Error('Invalid path');
   const data=await readFile(file);res.setHeader('content-type',({'.js':'text/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'})[extname(file)]||'application/octet-stream');res.end(data);
  }catch{res.statusCode=404;res.end('Not found');}
@@ -102,6 +103,7 @@ await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScale
  await until(()=>evaluate(`!!document.querySelector('#profile-goal [name="consent"]')`));
  assert.equal(await evaluate(`localStorage.getItem('dez-voltas-profile-edit-v1:browser-runner-a')`),null);
  assert.equal(await evaluate(`JSON.parse(localStorage.getItem('dez-voltas-draft-v1:browser-runner-a')).details.registrationCompleted`),true);
+ assert.equal(await evaluate(`(async()=>!!(await Promise.race([navigator.serviceWorker.ready,new Promise((_,reject)=>setTimeout(()=>reject(Error('Worker installation did not finish')),6000))])).active)()`),true,'Worker must activate with Cloudflare index.html redirect');
  // Permission is requested only by the user's activation action; no live push service is used.
  await until(()=>evaluate(`!!document.querySelector('#push-preferences button[type="submit"]:not([disabled])')`));
  assert.equal(await evaluate('window.__permissionRequests'),0);
