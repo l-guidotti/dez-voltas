@@ -14,6 +14,9 @@ ready=true;conflict=true;await submit();assert.equal(posts.length,0);conflict=fa
 await submit();assert.equal(posts.length,1);assert.equal(posts[0].report.consent,false);assert.match(context.renderWeeklyReview(),/salvo sem envio ao Gemini/);assert.ok(!context.renderWeeklyReview().includes('<script>'));
 fields.consent='on';await submit();assert.equal(posts[1].report.consent,true);assert.match(context.renderWeeklyReview(),/entra na fila automaticamente/);
 state.checkin={id:'checkin-1',job_id:'job-1',revision:2,report:posts[1].report};await context.refreshWeeklyReview();assert.match(context.renderWeeklyReview(),/Fechamento enviado/);const before=posts.length;await submit();assert.equal(posts.length,before);
+for(const [status,text] of [['failed',/não foi concluída/],['completed',/revisão está pronta/],['processing',/revisando seus registros/],['retrying',/nova tentativa automática/]]){
+ state.reviewJob={status,error:'Falha <script>alert(1)</script>'};await context.refreshWeeklyReview();const markup=context.renderWeeklyReview();assert.match(markup,text);assert.ok(!markup.includes('<script>'));
+}
 // An account switch cannot accept a late result for the old account.
 let release;context.sessionFetch=()=>new Promise(resolve=>release=resolve);const pending=context.refreshWeeklyReview();active=null;await context.refreshWeeklyReview();release(Response.json(state));await pending;assert.equal(context.renderWeeklyReview(),'');
 console.log('PASS: fechamento semanal, autorização separada, bloqueio offline/conflito, escape, envio único, estado congelado e conta trocada durante consulta (DOM simulado).');

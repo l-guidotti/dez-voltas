@@ -36,7 +36,21 @@ assert.deepEqual(rowsDocument(documentRows(doc,owner),owner).archive.plans[0].pr
 const short=prepareWeeklyReview({...ctx,profile:{...old,targetDate:addDate(today,5)}},today).profile;assert.equal(short.preparationDays,5);assert.equal(validateStoredProfile(short).preparationDays,5);assert.equal(validateSuggestion(sample(short),short).weeks.length,1);
 // A review can continue a time goal recorded with zero distance.
 const timed=prepareWeeklyReview({...ctx,profile:{...old,goal:'time',target:120},planned:ctx.planned.map(x=>({...x,km:0})),logs:ctx.logs.map(x=>({...x,km:0}))},today).profile;assert.equal(timed.review.maxWeeklyKm,0);assert.ok(timed.review.maxWeeklyMinutes>0);
-let sent;globalThis.fetch=async(url,options)=>{sent=JSON.parse(options.body);const model=sample(p);return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({...easyWorkouts(model),phases:model.phases.map(({title,focus})=>({title,focus}))})}]}}]});};
+let sent;const providerPlan=()=>{const model=easyWorkouts(sample(p));return {...model,phases:model.phases.map(({title,focus})=>({title,focus}))};};
+let output=providerPlan();output.weeks[0].totalKm=99;
+globalThis.fetch=async(url,options)=>{sent=JSON.parse(options.body);return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(output)}]}}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:20}});};
+const corrected=await generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence);
+assert.equal(corrected.result.plan.weeks[0].totalKm,15,'Provider arithmetic cannot discard valid sessions');
+assert.deepEqual(corrected.usage,{input:10,output:20});
+const wire=sent.generationConfig.responseJsonSchema.properties.weeks.items;
+assert.equal(wire.properties.totalKm,undefined);assert.ok(!wire.required.includes('totalKm'));
+output=providerPlan();for(const w of output.weeks)delete w.totalKm;
+assert.equal((await generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence)).result.plan.weeks[0].totalKm,15);
+output=providerPlan();output.weeks[0].sessions.forEach(s=>s.km=5.5);output.weeks[0].totalKm=0;
+await assert.rejects(generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence),/volume/);
+output=providerPlan();output.weeks[0].sessions[0].km='5';
+await assert.rejects(generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence),/distância/);
+output=providerPlan();
 await generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence);const input=JSON.parse(sent.contents[0].parts[0].text);assert.equal(input.weeklyReview.performed.length,6);assert.equal(input.weeklyReview.performed[0].id,undefined);assert.equal(input.weeklyReview.upcoming[0].title,'Rodagem prevista');assert.equal(input.weeklyReview.existingPhases[0].title,'Construção e especificidade');assert.match(sent.systemInstruction.parts[0].text,/REVISÃO SEMANAL/);
 assert.ok(!JSON.stringify(input).includes(owner));
 console.log('PASS: evolução com duas semanas, manter/reduzir, dor/doença, consentimento, registros incompletos, teto sem aumentos compostos, duração/RPE/carga, meta temporal, proximidade da prova, histórico sincronizado e contexto Gemini sem IDs de conta (simulado).');
@@ -47,7 +61,8 @@ globalThis.fetch=async(url,options={})=>{
  const body=options.body?JSON.parse(options.body):null;
  if(url.endsWith('/user'))return Response.json({id:owner,email:'private@example.com',email_confirmed_at:'2026-01-01'});
  if(url.endsWith('/rpc/read_daily_recovery'))return Response.json([]);
- if(url.endsWith('/rpc/read_weekly_review')){assert.equal(options.headers.Authorization,'Bearer access');return Response.json({planId:ctx.sourcePlanId,weekStart:start,weekEnd:end});}
+ if(url.endsWith('/rpc/read_weekly_review')){assert.equal(options.headers.Authorization,'Bearer access');return Response.json({planId:ctx.sourcePlanId,weekStart:start,weekEnd:end,checkin:{job_id:jobId}});}
+ if(url.includes('/ai_generation_jobs?id=eq.')){assert.equal(options.headers.Authorization,'Bearer access');assert.ok(url.endsWith(jobId+'&select=status,error,finished_at'));return Response.json([{status:'failed',error:'Falha de validação',finished_at:null}]);}
  if(url.endsWith('/rpc/save_weekly_review')){assert.equal(options.headers.Authorization,'Bearer access');assert.equal(body.plan_id,ctx.sourcePlanId);assert.equal(body.expected_revision,0);assert.deepEqual(body.report_data,report);return Response.json({id:'checkin',revision:1});}
  if(url.endsWith('/rpc/claim_ai_generation'))return Response.json({id:jobId,lease,kind:'weekly_review',profile:old,context:ctx});
  if(url.endsWith('/rpc/finish_ai_generation')){saved=body;return Response.json(true);}
@@ -55,7 +70,7 @@ globalThis.fetch=async(url,options={})=>{
  throw Error('Unexpected endpoint '+url);
 };
 const request=(body,headers={})=>new Request(env.APP_ORIGIN+'/api/training/weekly-review',{method:body?'POST':'GET',headers:{cookie:'__Host-dv-access=access',origin:env.APP_ORIGIN,'content-type':'application/json','x-account-id':owner,...headers},...(body?{body:JSON.stringify(body)}:{})});
-assert.equal((await handleApi(request(),env)).status,200);
+const weeklyResponse=await handleApi(request(),env);assert.equal(weeklyResponse.status,200);assert.deepEqual((await weeklyResponse.json()).reviewJob,{status:'failed',error:'Falha de validação',finished_at:null});
 assert.equal((await handleApi(request(undefined,{cookie:''}),env)).status,401);
 assert.equal((await handleApi(request(undefined,{'x-account-id':'another-owner'}),env)).status,409);
 const payload={planId:ctx.sourcePlanId,weekStart:start,revision:0,report};

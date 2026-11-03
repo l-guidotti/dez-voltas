@@ -51,7 +51,7 @@ function validateDetails(raw,days,goal){
  return {...(raw.intensity!==undefined?{intensity:validateIntensity(raw.intensity)}:{}),registrationCompleted:raw.registrationCompleted===true,eventName:eventName.trim(),terrain:choice(raw.terrain,['unspecified','road','trail','mixed','treadmill'],'o terreno'),elevationM:optionalNumber(raw.elevationM,0,20000,'o desnível positivo'),experience:choice(raw.experience,['unspecified','beginner','returning','regular','experienced'],'sua experiência'),experienceMonths:optionalNumber(raw.experienceMonths,0,600,'os meses de experiência',true),recentRuns:optionalNumber(raw.recentRuns,0,7,'os dias recentes de corrida',true),longDay,finishMinutes};
 }
 const text = (value,max=1500) => { if(typeof value!=='string'||!value.trim()||value.length>max) throw new Error('A sugestão contém texto inválido.');return value; };
-export function validateSuggestion(raw,p,{requireWorkouts=false}={}) {
+export function validateSuggestion(raw,p,{requireWorkouts=false,deriveTotals=false}={}) {
   const policy=intensityPolicy(p);
   if(!raw||!Array.isArray(raw.phases)||!Array.isArray(raw.weeks)||!Array.isArray(raw.warnings)) throw new Error('O Gemini não retornou um plano válido.');
   const detailedDays=Math.min(28,p.preparationDays), count=Math.ceil(detailedDays/7);
@@ -81,7 +81,8 @@ export function validateSuggestion(raw,p,{requireWorkouts=false}={}) {
       total+=km;return session;
     });
     if(sessions.filter(s=>s.long).length>1) throw new Error('Mais de um longo na mesma semana.');
-    if(Math.abs(finite(w.totalKm,0,300,'o total semanal')-total)>.15) throw new Error('O total semanal não corresponde às sessões.');
+    // Only the provider boundary derives totals. Stored/imported plans still require consistency.
+    if(!deriveTotals&&Math.abs(finite(w.totalKm,0,300,'o total semanal')-total)>.15) throw new Error('O total semanal não corresponde às sessões.');
     // Product guardrails for initial suggestions, not a universal injury-prevention formula.
     if(total>(p.review?p.review.maxWeeklyKm:Math.max(p.weeklyKm,6)*Math.pow(1.15,i))+(p.review?.05:.2)) throw new Error('A sugestão aumentou demais o volume recente. Gere outra sugestão ou revise seu perfil.');
     if(sessions.some(s=>s.km>(p.review?p.review.maxSessionKm:Math.max(p.longestKm,3)*Math.pow(1.15,i))+(p.review?.05:.2))) throw new Error('O longo sugerido excede o limite inicial do perfil.');
