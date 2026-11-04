@@ -1,3 +1,7 @@
+# Política atual
+
+Novas revisões usam limites por semana e permitem introdução controlada de qualidade. Consulte [REVISAO-PROGRESSIVA.md](REVISAO-PROGRESSIVA.md). Os critérios de tetos iguais e preservação exclusiva de qualidade descritos abaixo documentam a política anterior, ainda usada para validar planos históricos.
+
 # Revisão semanal da preparação
 
 Na seção **Plano**, usuários com plano em uso encontram **Como foi sua semana?** As semanas têm sete dias contados a partir do início do bloco, sem assumir segunda-feira. O fechamento abre no último dia; o envio ocorre depois que a semana encerra no fuso de São Paulo, enquanto ainda há preparação pela frente.

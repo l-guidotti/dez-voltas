@@ -23,10 +23,10 @@ assert.throws(()=>prepareWeeklyReview(ctx,end),/encerrada/);
 assert.throws(()=>prepareWeeklyReview(ctx,addDate(end,8)),/recentemente/);
 for(const patch of [{fatigue:0},{sleep:6},{days:[0,0]},{notes:'x'.repeat(1001)},{consent:'yes'}])assert.throws(()=>validateWeeklyCheckin({...report,...patch}));
 assert.throws(()=>validateProfile(p,today),/fechamento semanal/);assert.deepEqual(validateStoredProfile(p),p);
-for(const slot of trainingCalendar(p)){assert.equal(slot.weeklyKmCeiling,p.review.maxWeeklyKm);assert.equal(slot.sessionKmCeiling,p.review.maxSessionKm);}
-function sample(profile){return {summary:'Manter ou progredir um pouco conforme recuperação.',feasibility:'Revisão semanal do realizado.',warnings:['Reavaliar na próxima semana.'],phases:phaseCalendar(profile).map(x=>({...x,title:'Preparação',focus:'Adaptar pela recuperação.'})),weeks:trainingCalendar(profile).map(slot=>{const sessions=slot.availableDates.slice(0,3).map(date=>({date,title:'Corrida fácil',km:5,minutes:35,rpe:3,long:false,instructions:'Interrompa com dor; não compense faltas.'}));return {start:slot.start,totalKm:sessions.length*5,focus:'Confortável',sessions};})};}
+for(const [i,slot] of trainingCalendar(p).entries()){assert.equal(slot.weeklyKmCeiling,p.review.weeks[i].maxWeeklyKm);assert.equal(slot.sessionKmCeiling,p.review.weeks[i].maxSessionKm);}
+function sample(profile){return {summary:'Manter ou progredir um pouco conforme recuperação.',feasibility:'Revisão semanal do realizado.',warnings:['Reavaliar na próxima semana.'],phases:phaseCalendar(profile).map(x=>({...x,title:'Preparação',focus:'Adaptar pela recuperação.'})),weeks:trainingCalendar(profile).map(slot=>{const sessions=slot.availableDates.slice(0,3).map(date=>({date,title:'Corrida fácil',km:Math.min(5,slot.sessionKmCeiling),minutes:Math.min(35,slot.maxMinutes),rpe:3,long:false,instructions:'Interrompa com dor; não compense faltas.'}));return {start:slot.start,totalKm:Math.round(sessions.reduce((n,s)=>n+s.km,0)*10)/10,focus:'Confortável',sessions};})};}
 const plan=validateSuggestion(sample(p),p);assert.equal(plan.weeks.length,4);
-let bad=sample(p);bad.weeks[3].sessions[0].km=6;bad.weeks[3].totalKm=16;assert.throws(()=>validateSuggestion(bad,p),/volume|longo/);
+let bad=sample(p);bad.weeks[3].sessions[0].km=p.review.weeks[3].maxSessionKm+1;bad.weeks[3].totalKm=10+bad.weeks[3].sessions[0].km;assert.throws(()=>validateSuggestion(bad,p),/volume|longo/);
 bad=sample(p);bad.weeks[0].sessions[0].minutes=40;assert.throws(()=>validateSuggestion(bad,p),/recuperação/);
 bad=sample(p);bad.weeks[0].sessions.forEach(x=>x.rpe=4);assert.throws(()=>validateSuggestion(bad,p),/recuperação/);
 const result={version:1,profile:p,plan,generatedAt:'2026-10-23T12:00:00Z',model:'test'};assert.deepEqual(checkedSuggestion(result).profile.review,p.review);
@@ -53,7 +53,7 @@ await assert.rejects(generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API
 output=providerPlan();
 await generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence);const input=JSON.parse(sent.contents[0].parts[0].text);assert.equal(input.weeklyReview.performed.length,6);assert.equal(input.weeklyReview.performed[0].id,undefined);assert.equal(input.weeklyReview.upcoming[0].title,'Rodagem prevista');assert.equal(input.weeklyReview.existingPhases[0].title,'Construção e especificidade');assert.match(sent.systemInstruction.parts[0].text,/REVISÃO SEMANAL/);
 assert.ok(!JSON.stringify(input).includes(owner));
-console.log('PASS: evolução com duas semanas, manter/reduzir, dor/doença, consentimento, registros incompletos, teto sem aumentos compostos, duração/RPE/carga, meta temporal, proximidade da prova, histórico sincronizado e contexto Gemini sem IDs de conta (simulado).');
+console.log('PASS: evolução com duas semanas, manter/reduzir, dor/doença, consentimento, registros incompletos, limites projetados por semana, duração/RPE/carga, meta temporal, proximidade da prova, histórico sincronizado e contexto Gemini sem IDs de conta (simulado).');
 
 const env={APP_ORIGIN:'https://example.com',SUPABASE_URL:'https://auth.example.com',SUPABASE_ANON_KEY:'publishable',GEMINI_API_KEY:'secret',GEMINI_MODEL:'gemini-test'};
 const jobId='00000000-0000-4000-8000-000000000001',lease='00000000-0000-4000-8000-000000000002',runner='a'.repeat(64);let saved,providerCalls=0;
