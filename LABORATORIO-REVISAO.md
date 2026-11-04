@@ -27,3 +27,13 @@ node scripts/weekly-review-lab.mjs --result artifacts/weekly-review/published-re
 O consumidor publicado guarda resultado validado ou erro; ele não preserva respostas brutas rejeitadas. O relatório identifica essa limitação. Após salvar o resultado, remova somente a conta temporária identificada, que apaga sua tarefa por cascata. Não altere contadores de cota nem tarefas reais. Este teste não requer publicar ou migrar o PWA.
 
 Verificação automatizada: `node checks/weekly-lab.mjs` usa provedor simulado e não consome Gemini.
+
+## Testar o cron semanal publicado
+
+`node scripts/weekly-scheduler-lab.mjs` emite um fixture e SQL transacional para uma conta temporária identificada por UUID e e-mail `example.invalid`. O SQL cria plano ativo, sessões, diário e recuperação fictícios; depois chama `save_weekly_review` com a role autenticada. Ele não insere tarefas nem chama o enfileirador. A semana fica encerrada em relação ao relógio atual. Aplicar esse SQL no projeto exige acesso de operação ao banco.
+
+Após o commit, aguarde o próprio `dez-voltas-weekly-reviews` criar a tarefa e o `dez-voltas-ai-queue` acionar o consumidor. Registre `weekly_checkins.created_at`, a referência `job_id`, `ai_generation_jobs.created_at`, estado, contexto, resultado, tokens e as execuções correspondentes em `cron.job_run_details`. Consulte novamente depois de outro tick para confirmar que só há uma tarefa. Não altere o relógio, as agendas, o consentimento ou os contadores globais.
+
+Para gerar o relatório, salve `{fixture,job,mode:"agendamento publicado",schedulerEvidence:{checkin,jobCount,cronRuns}}` em um JSON local e execute `--result caminho.json --out artifacts/weekly-scheduler-fiction`. Esse modo documenta o fluxo fechamento → cron semanal → fila → consumidor → Gemini. Não exercita o formulário no navegador nem observa a transição real pela meia-noite: a elegibilidade é simulada por uma semana já encerrada.
+
+Uma cópia de registros reais exige identificação e autorização do usuário para os dados e seu envio ao Gemini. Use a semana encerrada do plano ativo e um fechamento já preenchido; não invente recuperação, dor, disponibilidade ou consentimento. Copie somente o intervalo necessário para outra conta temporária, remapeando IDs de plano e sessões. Nunca reenvie o fechamento da conta original nem altere seu plano. O fixture do relatório deve incluir `dataKind:"authorized-copy"`, e seus arquivos devem continuar fora do Git. Depois de preservar os relatórios, exclua somente as contas temporárias identificadas e confirme a remoção das tarefas por cascata.

@@ -3,6 +3,7 @@ import {weeklyFixture,prepareFixture} from '../scripts/weekly-review-fixture.mjs
 import {renderReport,runLive} from '../scripts/weekly-review-lab.mjs';
 import {trainingCalendar,phaseCalendar} from '../server/api.js';
 import {easyWorkouts} from './workout-fixtures.mjs';
+import {schedulerSeed} from '../scripts/weekly-scheduler-lab.mjs';
 
 const fixture=weeklyFixture('2026-11-03'),prepared=prepareFixture(fixture);
 assert.equal(prepared.prepared.profile.review.decision,'hold');
@@ -26,4 +27,13 @@ assert.ok(!html.includes('</script><img'));assert.ok(html.includes('&lt;/script&
 const embedded=html.match(/<script type="application\/json" id="report">([\s\S]*?)<\/script>/)[1];
 assert.equal(JSON.parse(embedded).job.error,hostile.job.error);
 assert.match(html,/Baixar relatório JSON/);
+const seed=schedulerSeed(fixture,'20000000-0000-4000-8000-000000000001');
+assert.match(seed.sql,/set local role authenticated/);assert.match(seed.sql,/public.save_weekly_review/);
+assert.ok(!seed.sql.includes('insert into public.ai_generation_jobs'));
+assert.ok(!seed.sql.includes('perform ai_private.enqueue_weekly_reviews'));
+assert.ok(seed.email.endsWith('@example.invalid'));
+for(const log of fixture.context.logs){assert.ok(seed.sql.includes("'"+log.id+"',1,1,'"+fixture.context.sourcePlanId+"'"),'Every diary entry must have a copied session for its foreign key');}
+const copied={...report,fixture:{...fixture,dataKind:'authorized-copy',label:'Cópia autorizada'},mode:'agendamento publicado',schedulerEvidence:{checkin:{created_at:'2026-11-03T20:00:00Z'},jobCount:1,cronRuns:[{jobname:'dez-voltas-weekly-reviews',start_time:'2026-11-03T20:01:00Z',status:'succeeded'}]}};
+const copiedHtml=renderReport(copied);assert.match(copiedHtml,/Cópia autorizada dos registros reais/);assert.ok(!copiedHtml.includes('Dados inteiramente fictícios.'));
+assert.match(copiedHtml,/nenhum job foi inserido diretamente/);assert.match(copiedHtml,/dez-voltas-weekly-reviews/);
 console.log('PASS: laboratório fictício, manutenção/redução/dor, chamada única, captura antes da validação, segredo ausente e relatório visual com JSON seguro.');
