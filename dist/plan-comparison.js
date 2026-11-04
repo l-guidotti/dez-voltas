@@ -1,4 +1,5 @@
 import {addDate,daysBetween} from './training-contract.js';
+import {workoutTypes} from './workout-contract.js';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const round=x=>Math.round((x+Number.EPSILON)*10)/10;
 const fmt=x=>Number(x).toLocaleString('pt-BR',{maximumFractionDigits:1});
@@ -38,7 +39,10 @@ export function compareWeeklyPlans(suggestion,{owner,plans=[],activePlan=null}={
  const summarize=dates=>({start:dates[0],end:dates.at(-1),days:dates.length,before:stats(previous,new Set(dates)),after:stats(suggestion,new Set(dates))});
  const weeks=newRanges.map((range,i)=>{
   const dates=common.filter(d=>d>=range.start&&d<=range.end),fullDays=daysBetween(range.start,range.end)+1;
-  return {number:i+1,start:range.start,end:range.end,fullDays,comparison:dates.length?summarize(dates):null};
+  const oldSessions=previous.plan.weeks.flatMap(w=>w.sessions),newSessions=suggestion.plan.weeks.flatMap(w=>w.sessions);
+  const sessionDates=[...new Set([...oldSessions,...newSessions].map(s=>s.date))].filter(d=>d>=range.start&&d<=range.end).sort();
+  const sessions=sessionDates.map(date=>({date,comparable:contains(sourceRanges,date),before:oldSessions.find(s=>s.date===date)||null,after:newSessions.find(s=>s.date===date)||null}));
+  return {number:i+1,start:range.start,end:range.end,fullDays,sessions,comparison:dates.length?summarize(dates):null};
  });
  return {status:common.length?'ready':'no-overlap',stale,adopted,days:allDates.length,comparedDays:common.length,uncomparedDays:allDates.length-common.length,total:common.length?summarize(common):null,weeks};
 }
@@ -49,22 +53,24 @@ function changeText(change,unit){
 }
 function metricCards(comparison){return `<div class="plan-compare-metrics">${metrics.map(([key,title,unit])=>{
  const before=comparison.before[key],after=comparison.after[key],change=metricChange(before,after);
- const oldTone=change.direction==='up'?'lower':change.direction==='down'?'higher':'neutral';
- const newTone=change.direction==='up'?'higher':change.direction==='down'?'lower':'neutral';
  const value=n=>n===null?'Sem sessões':`${fmt(n)} <small>${esc(key==='sessions'&&n===1?'sessão':unit)}</small>`;
  const difference=key==='rpe'?{...change,percent:null}:change;
  const deltaUnit=key==='rpe'?(Math.abs(change.delta)===1?'ponto de RPE':'pontos de RPE'):key==='sessions'&&Math.abs(change.delta)===1?'sessão':unit;
- return `<article class="plan-compare-metric"><h4>${esc(title)}</h4><dl class="plan-compare-values"><div class="compare-${oldTone}"><dt>Plano anterior</dt><dd>${value(before)}</dd></div><div class="compare-${newTone}"><dt>Nova sugestão</dt><dd>${value(after)}</dd></div></dl><p class="plan-compare-delta" data-direction="${change.direction}"><span aria-hidden="true">${{up:'↑',down:'↓',same:'=',unknown:'—'}[change.direction]}</span> ${esc(changeText(difference,deltaUnit))}</p></article>`;
+ return `<article class="plan-compare-metric"><h4>${esc(title)}</h4><dl class="plan-compare-values"><div class="compare-before"><dt>Plano anterior</dt><dd>${value(before)}</dd></div><div class="compare-after"><dt>Nova proposta</dt><dd>${value(after)}</dd></div></dl><p class="plan-compare-delta" data-direction="${change.direction}"><span aria-hidden="true">${{up:'↑',down:'↓',same:'=',unknown:'—'}[change.direction]}</span> ${esc(changeText(difference,deltaUnit))}</p></article>`;
  }).join('')}</div>`;}
+function sessionTable(rows){
+ const cell=(s,known=true)=>!known?'<span>Sem detalhamento anterior</span>':s?`<strong>${esc(s.title||'Corrida')}</strong><span>${fmt(s.km)} km · ${fmt(s.minutes)} min · RPE ${fmt(s.rpe)}/10</span>${s.workout?`<small>${esc(workoutTypes[s.workout.type]||s.workout.type)}</small>`:''}`:'<span>Descanso previsto</span>';
+ return rows.length?`<div class="plan-compare-scroll"><table class="plan-compare-sessions"><caption>Treinos lado a lado, pela mesma data</caption><thead><tr><th scope="col">Data</th><th scope="col" class="compare-before">Plano anterior</th><th scope="col" class="compare-after">Nova proposta</th><th scope="col">Mudança de distância</th></tr></thead><tbody>${rows.map(row=>`<tr><th scope="row">${date(row.date)}</th><td class="compare-before">${cell(row.before,row.comparable)}</td><td class="compare-after">${cell(row.after)}</td><td>${row.comparable?esc(changeText(metricChange(row.before?.km||0,row.after?.km||0),'km')):'Sem comparação'}</td></tr>`).join('')}</tbody></table></div>`:'<p>Sem sessões de corrida neste período.</p>';
+}
 export function renderPlanComparison(suggestion,context){
  const c=compareWeeklyPlans(suggestion,context);if(!c)return '';
  const heading='<span class="eyebrow muted">ANTES DE DECIDIR</span><h3>O que muda no seu plano?</h3>';
  const missing=c.status==='missing'||c.status==='unavailable';
  if(missing)return `<section class="plan-comparison" aria-label="Comparação com o plano anterior">${heading}<p>O plano que originou esta revisão não está disponível neste aparelho. Sincronize sua conta para recuperar a comparação. Nenhuma diferença foi calculada.</p></section>`;
  const state=c.adopted?'<p class="notice">Esta sugestão já está em uso. A comparação continua mostrando o plano que originou a revisão.</p>':c.stale?'<p class="notice">O plano em uso mudou desde esta revisão. Esta comparação usa o plano anterior de origem; faça uma nova revisão antes de substituir o plano atual.</p>':'';
- const legend='<p class="field-help">Verde indica o maior valor e vermelho o menor valor em cada comparação. As setas e os números mostram aumento ou redução. Reduzir a carga pode ser adequado para recuperação ou polimento.</p>';
+ const legend='<p class="field-help"><strong>Vermelho: plano anterior. Verde: nova proposta.</strong> As cores identificam as versões; as setas e os números mostram aumento ou redução. Reduzir a carga pode ser adequado para recuperação ou polimento.</p>';
  const coverage=c.uncomparedDays?`<p class="notice">${c.uncomparedDays} de ${c.days} dias da nova sugestão não têm detalhamento correspondente no plano anterior e ficam fora dos cálculos. Ausência de planejamento não é descanso nem volume zero.</p>`:'';
  const total=c.total?`<p><strong>${esc(changeText(metricChange(c.total.before.km,c.total.after.km),'km'))}</strong> nos ${c.total.days} dias comparáveis, de ${date(c.total.start)} a ${date(c.total.end)}.</p>${metricCards(c.total)}`:'<p>Os planos não têm dias detalhados em comum. Não é possível afirmar aumento ou redução comparando períodos diferentes.</p>';
- const weeks=`<details class="plan-compare-weeks"><summary>Conferir as diferenças por semana</summary>${c.weeks.map(w=>`<section class="plan-compare-week"><h4>Semana ${w.number} · ${date(w.start)} a ${date(w.end)}</h4>${w.comparison?`${w.comparison.days<w.fullDays?`<p class="field-help">Comparação parcial: ${w.comparison.days} de ${w.fullDays} dias, de ${date(w.comparison.start)} a ${date(w.comparison.end)}.</p>`:''}${metricCards(w.comparison)}`:'<p>Sem detalhamento anterior para comparar esta semana.</p>'}</section>`).join('')}</details>`;
+ const weeks=`<div class="plan-compare-weeks"><h4>O que mudou em cada treino</h4><p class="field-help">Treinos mudados de dia aparecem nas respectivas datas. Dias fora do detalhamento anterior ficam sem comparação.</p>${c.weeks.map(w=>`<details class="plan-compare-week" ${w.number===1?'open':''}><summary>Semana ${w.number} · ${date(w.start)} a ${date(w.end)}</summary>${sessionTable(w.sessions)}${w.comparison?`${w.comparison.days<w.fullDays?`<p class="field-help">Comparação parcial: ${w.comparison.days} de ${w.fullDays} dias, de ${date(w.comparison.start)} a ${date(w.comparison.end)}.</p>`:''}${metricCards(w.comparison)}`:'<p>Sem detalhamento anterior para comparar esta semana.</p>'}</details>`).join('')}</div>`;
  return `<section class="plan-comparison" aria-label="Comparação com o plano anterior">${heading}${state}${legend}${total}${coverage}${weeks}<p class="field-help">RPE médio previsto = soma de minutos × RPE das sessões, dividida pelo tempo total. É uma estimativa do plano; o esforço real fica no diário. As diferenças são calculadas a partir dos treinos, sem uma nova chamada à IA.</p><p>A sugestão só altera seu calendário quando você escolher <strong>Usar este plano</strong>. Você pode continuar com o plano anterior.</p></section>`;
 }

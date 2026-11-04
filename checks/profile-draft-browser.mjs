@@ -157,8 +157,8 @@ await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScale
  await evaluate(`(async()=>{const {renderPlanComparison}=await import('/plan-comparison.js');document.querySelector('#profile-result-region').innerHTML='<section class="panel profile-result">'+renderPlanComparison(${JSON.stringify(comparisonNext)},${JSON.stringify({owner:account.id,plans:[comparisonSource],activePlan:comparisonSource})})+'</section>';document.querySelector('.plan-comparison').scrollIntoView();})()`);
  assert.equal(await evaluate(`document.querySelector('.plan-comparison').textContent.includes('Aumento de 15 km')`),true);
  assert.equal(await evaluate(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`),true,'Comparison must fit a mobile screen');
- assert.equal(await evaluate(`getComputedStyle(document.querySelector('.compare-higher')).color`),'rgb(34, 95, 57)');
- assert.equal(await evaluate(`getComputedStyle(document.querySelector('.compare-lower')).color`),'rgb(154, 48, 42)');
+ assert.equal(await evaluate(`getComputedStyle(document.querySelector('.compare-after')).color`),'rgb(34, 95, 57)');
+ assert.equal(await evaluate(`getComputedStyle(document.querySelector('.compare-before')).color`),'rgb(154, 48, 42)');
  await evaluate(`document.querySelector('.plan-compare-weeks summary').click()`);
  assert.equal(await evaluate(`document.querySelector('.plan-compare-weeks').open`),true);
  assert.equal(await evaluate(`document.querySelector('.plan-compare-week').textContent.includes('Aumento de 5 km')`),true);
