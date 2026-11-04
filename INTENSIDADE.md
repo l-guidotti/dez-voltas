@@ -1,3 +1,5 @@
+Para novas revisões semanais progressivas, a introdução de fartlek/ritmo/intervalado é regida por [REVISAO-PROGRESSIVA.md](REVISAO-PROGRESSIVA.md). As faixas anteriores abaixo continuam aplicáveis a planos iniciais e revisões históricas sem esse marcador.
+
 # Tipos de treino e intensidade por perfil
 
 A nova geração não depende só de pedir mais variedade no prompt. O servidor calcula a elegibilidade, restringe os tipos no JSON Schema e valida as etapas e a dose da resposta. Cadastros anteriores continuam válidos: sem os novos dados, a geração mantém a faixa de base. Os planos já salvos não são reescritos.

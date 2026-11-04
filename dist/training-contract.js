@@ -19,6 +19,7 @@ export function validateProfile(raw, today=localToday(), {requireConsent=true,al
   const startDate=dateOnly(raw.startDate),targetDate=dateOnly(raw.targetDate);
   if(startDate<today || daysBetween(today,startDate)>90) throw new Error('Escolha um início entre hoje e os próximos 90 dias.');
   const preparationDays=daysBetween(startDate,targetDate);
+  if(review?.policy==='progressive-v1'&&review.weeks.length!==Math.ceil(Math.min(28,preparationDays)/7))throw new Error('Os limites projetados não cobrem o bloco.');
   if(preparationDays<(review?1:14)||preparationDays>730) throw new Error('A preparação precisa ter entre 14 dias e dois anos.');
   if(!['distance','time','backyard'].includes(raw.goal)) throw new Error('Selecione o objetivo.');
   let target;
@@ -48,8 +49,19 @@ function validateReviewLimits(raw){
  const weekStart=dateOnly(raw.weekStart),weekEnd=dateOnly(raw.weekEnd);if(daysBetween(weekStart,weekEnd)!==6)throw new Error('Semana de revisão inválida.');
  const out={sourcePlanId:raw.sourcePlanId,weekStart,weekEnd,decision:raw.decision,reason:raw.reason};
  for(const [name,max]of Object.entries({maxWeeklyKm:200,maxWeeklyMinutes:3600,maxSessionKm:150,maxSessionMinutes:600,maxRpe:6,maxLoad:36000,observedKm:15000,observedMinutes:144000}))out[name]=finite(raw[name],0,max,'os limites da revisão');
- if(!Number.isInteger(out.maxRpe)||out.maxRpe<1)throw new Error('Esforço de revisão inválido.');if(raw.quality!==undefined)out.quality=validateReviewQuality(raw.quality);return out;
+ if(!Number.isInteger(out.maxRpe)||out.maxRpe<1)throw new Error('Esforço de revisão inválido.');if(raw.quality!==undefined)out.quality=validateReviewQuality(raw.quality);
+ if(raw.policy!==undefined){
+  if(raw.policy!=='progressive-v1'||!Array.isArray(raw.weeks)||raw.weeks.length<1||raw.weeks.length>4)throw new Error('Política de progressão inválida.');
+  out.policy=raw.policy;out.weeks=raw.weeks.map((w,i)=>{
+   if(w.week!==i+1||typeof w.condition!=='string'||!w.condition||w.condition.length>300)throw new Error('Semana projetada inválida.');
+   const week={week:i+1};for(const [name,max]of Object.entries({maxWeeklyKm:200,maxWeeklyMinutes:3600,maxSessionKm:150,maxSessionMinutes:600,maxRpe:6,maxLoad:36000}))week[name]=finite(w[name],0,max,'os limites da semana');
+   if(!Number.isInteger(week.maxRpe)||week.maxRpe<1)throw new Error('Esforço projetado inválido.');
+   return {...week,condition:w.condition};
+  });
+ }
+ return out;
 }
+export function reviewWeekLimits(profile,index=0){return profile.review?.policy==='progressive-v1'?profile.review.weeks[index]:profile.review;}
 function validateDetails(raw,days,goal){
  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('Confira as informações adicionais.');
  const optionalNumber=(v,min,max,label,integer=false)=>{if(v===null||v===undefined)return null;const n=finite(v,min,max,label);if(integer&&!Number.isInteger(n))throw new Error('Informe um número inteiro para '+label+'.');return n;};
@@ -71,6 +83,7 @@ export function validateSuggestion(raw,p,{requireWorkouts=false,deriveTotals=fal
   if(expected!==addDate(p.targetDate,1)) throw new Error('Faltam fases até a prova.');
   const seen=new Set();
   const weeks=raw.weeks.map((w,i)=>{
+    const limits=reviewWeekLimits(p,i);
     const start=addDate(p.startDate,i*7),end=addDate(p.startDate,Math.min((i+1)*7,detailedDays)-1);
     if(w.start!==start) throw new Error(`Semana ${i+1}: o início deve ser ${start}. O Gemini retornou uma semana em data diferente.`);
     if(!Array.isArray(w.sessions)) throw new Error(`Semana ${i+1}: lista de sessões inválida.`);
@@ -84,7 +97,7 @@ export function validateSuggestion(raw,p,{requireWorkouts=false,deriveTotals=fal
       if(typeof s.long!=='boolean'||minutes>(s.long?p.longMinutes:p.maxMinutes)) throw new Error('Sessão excede seu tempo disponível.');
       const rpe=finite(s.rpe,1,10,'o esforço sugerido');
       if(!Number.isInteger(rpe)) throw new Error('Esforço inválido.');
-      if(p.weeklyKm<20&&rpe>4) throw new Error('A sugestão contém esforço incompatível com a base recente.');
+      if(p.weeklyKm<20&&rpe>4&&p.review?.policy!=='progressive-v1') throw new Error('A sugestão contém esforço incompatível com a base recente.');
       const session={date,km,minutes,rpe,long:s.long,title:text(s.title,120),instructions:text(s.instructions)};
       if(requireWorkouts&&s.workout===undefined)throw new Error('Faltam os tipos e as etapas dos treinos.');
       if(s.workout!==undefined)session.workout=validateWorkout(s.workout,session,policy);
@@ -94,9 +107,9 @@ export function validateSuggestion(raw,p,{requireWorkouts=false,deriveTotals=fal
     // Only the provider boundary derives totals. Stored/imported plans still require consistency.
     if(!deriveTotals&&Math.abs(finite(w.totalKm,0,300,'o total semanal')-total)>.15) throw new Error('O total semanal não corresponde às sessões.');
     // Product guardrails for initial suggestions, not a universal injury-prevention formula.
-    if(total>(p.review?p.review.maxWeeklyKm:Math.max(p.weeklyKm,6)*Math.pow(1.15,i))+(p.review?.05:.2)) throw new Error('A sugestão aumentou demais o volume recente. Gere outra sugestão ou revise seu perfil.');
-    if(sessions.some(s=>s.km>(p.review?p.review.maxSessionKm:Math.max(p.longestKm,3)*Math.pow(1.15,i))+(p.review?.05:.2))) throw new Error('O longo sugerido excede o limite inicial do perfil.');
-    if(p.review&&(sessions.some(s=>s.minutes>p.review.maxSessionMinutes+.05||s.rpe>p.review.maxRpe)||sessions.reduce((n,s)=>n+s.minutes,0)>p.review.maxWeeklyMinutes+.05||sessions.reduce((n,s)=>n+s.minutes*s.rpe,0)>p.review.maxLoad+.05))throw new Error('A sugestão excede os limites de recuperação da revisão semanal.');
+    if(total>(limits?limits.maxWeeklyKm:Math.max(p.weeklyKm,6)*Math.pow(1.15,i))+(limits?.05:.2)) throw new Error('A sugestão aumentou demais o volume recente. Gere outra sugestão ou revise seu perfil.');
+    if(sessions.some(s=>s.km>(limits?limits.maxSessionKm:Math.max(p.longestKm,3)*Math.pow(1.15,i))+(limits?.05:.2))) throw new Error('O longo sugerido excede o limite inicial do perfil.');
+    if(limits&&(sessions.some(s=>s.minutes>limits.maxSessionMinutes+.05||s.rpe>limits.maxRpe)||sessions.reduce((n,s)=>n+s.minutes,0)>limits.maxWeeklyMinutes+.05||sessions.reduce((n,s)=>n+s.minutes*s.rpe,0)>limits.maxLoad+.05))throw new Error('A sugestão excede os limites de recuperação da revisão semanal.');
     return {start,totalKm:Math.round(total*10)/10,focus:text(w.focus),sessions:sessions.sort((a,b)=>a.date.localeCompare(b.date))};
   });
   validateWorkoutSchedule(weeks,p,policy);

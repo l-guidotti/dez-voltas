@@ -13,7 +13,7 @@ export function validateWeeklyCheckin(raw){
  return {...(raw.recoveryConsent!==undefined?{recoveryConsent:raw.recoveryConsent===true&&raw.consent}:{}),...out,pain:raw.pain,illness:raw.illness,complete:raw.complete,consent:raw.consent,days:[...raw.days].sort(),notes:raw.notes.trim()};
 }
 const sum=(items,fn)=>items.reduce((a,b)=>a+fn(b),0);
-const floor=n=>Math.floor(Math.max(0,n)*10)/10;
+const floor=n=>Math.floor((Math.max(0,n)+1e-9)*10)/10;
 export function dailyRecoveryEvidence(context,checkin,start,end){
  if(!checkin.recoveryConsent)return null;
  const raw=context.dailyRecoveryConsent===true?context.dailyRecovery||[]:[];
@@ -49,38 +49,46 @@ export function prepareWeeklyReview(context,today=localToday()){
  const prev=context.previousCheckin;
  const previousKm=sum(previous,x=>x.km),previousMinutes=sum(previous,x=>x.minutes),previousLoad=sum(previous,x=>x.minutes*x.rpe);
  const recentJump=previous.length>0&&(km>previousKm*1.2||minutes>previousMinutes*1.2||load>previousLoad*1.2);
- const previousGood=prev?.complete===true&&prev.pain==='none'&&prev.illness===false&&prev.fatigue<=2&&prev.sleep>=3&&prev.readiness>=4&&previous.length>0&&previous.every(x=>x.pain==='none'&&x.rpe<=6);
- const good=(!c.recoveryConsent||recovery?.good===true)&&c.complete&&c.fatigue<=2&&c.sleep>=3&&c.readiness>=4&&completion>=.8&&plannedMinutes>0&&minutes>=plannedMinutes*.8&&minutes<=plannedMinutes*1.1&&load<=plannedLoad*1.1&&previousGood&&week.every(x=>x.rpe<=6)&&km<=previousKm*1.1&&minutes<=previousMinutes*1.1&&load<=previousLoad*1.1&&longest<=Math.max(...previous.map(x=>x.km))*1.1&&daysBetween(today,context.profile.targetDate)>14;
+ const previousGood=prev?.complete===true&&prev.pain==='none'&&prev.illness===false&&prev.fatigue<=2&&prev.sleep>=3&&prev.readiness>=4&&previous.length>0&&previous.every(x=>x.pain==='none');
+ const good=(!c.recoveryConsent||recovery?.good===true)&&c.complete&&c.fatigue<=2&&c.sleep>=3&&c.readiness>=4&&completion>=.8&&plannedMinutes>0&&minutes>=plannedMinutes*.8&&minutes<=plannedMinutes*1.1&&load<=plannedLoad*1.1&&previousGood&&km<=previousKm*1.1&&minutes<=previousMinutes*1.1&&load<=previousLoad*1.1&&longest<=Math.max(...previous.map(x=>x.km))*1.1&&daysBetween(today,context.profile.targetDate)>14;
  const reduce=recovery?.reduce===true||recentJump||c.fatigue>=4||c.sleep<=2||c.readiness<=2||completion<.6||!c.complete;
  const decision=reduce?'reduce':good?'increase':'hold',factor=reduce?.8:good?1.05:1;
  const baseReason=reduce?'A recuperação ou a cobertura dos registros pede redução e nova avaliação.':good?'Duas semanas com registros confirmados e boa recuperação permitem avaliar uma progressão pequena; aumentar não é obrigatório.':'Manter a carga é a referência. Ainda não há evidências suficientes para propor aumento.';
  const reason=baseReason+(recovery?' Check-ins diários: '+recovery.recordedDays+'/7 nesta semana e '+recovery.previousDays+'/7 na anterior. Ausências não comprovam recuperação.':'');
- // Ceilings, never mandatory targets. No compounding increases across the four proposed weeks.
- const review={sourcePlanId:context.sourcePlanId,weekStart:start,weekEnd:end,decision,reason,
-  maxWeeklyKm:floor(Math.min(200,km*factor,plannedKm>0?plannedKm*(good?1.05:1):km*factor)),
-  maxWeeklyMinutes:floor(Math.min(3600,minutes*factor,plannedMinutes>0?plannedMinutes*(good?1.05:1):minutes*factor)),
-  maxSessionKm:floor(Math.min(150,longest*(good?1.05:1))),maxSessionMinutes:floor(Math.min(600,duration*(good?1.05:1))),
-  maxRpe:good&&km>=20?5:4,maxLoad:floor(Math.min(36000,load*factor)),observedKm:floor(km),observedMinutes:floor(minutes)};
- const original=context.currentIntensity?{...context.profile,details:{...context.profile.details,intensity:context.currentIntensity}}:context.profile;
- // A weekly review can preserve quality already practiced; it cannot introduce a new peak while raising volume.
- if(original.details?.intensity){
-  const updated={...original,weeklyKm:Math.min(200,km),preparationDays:daysBetween(today,original.targetDate),details:{...original.details,intensity:{...original.details.intensity,fatigue:c.fatigue,sleep:c.sleep}}};
-  const candidate=intensityPolicy({...updated,review:undefined});
-  const actualIds=new Set(week.map(x=>x.id));
-  const practiced=planned.filter(x=>actualIds.has(x.id)&&x.workout&&qualityTypes.includes(x.workout.type)&&week.some(log=>log.id===x.id&&log.minutes>=Number(x.minutes)*.95&&log.rpe>=4&&(Number(x.km)===0||log.km>=Number(x.km)*.9)));
-  const previousHasQuality=previous.some(x=>Number(x.rpe)>=4);
-  if(!reduce&&previousGood&&c.complete&&candidate.maxQuality&&practiced.length&&previousHasQuality){
-   const peak=Math.max(...practiced.map(x=>workoutStats(x.workout).peak));
-   const dose=Math.max(...practiced.map(x=>workoutStats(x.workout).hardMinutes));
-   review.quality={allowedTypes:candidate.allowedTypes.filter(x=>qualityTypes.includes(x)&&peak>=({fartlek:5,tempo:6,interval:7}[x])),maxPeakRpe:Math.min(candidate.maxPeakRpe,peak),maxHardMinutes:Math.min(candidate.maxHardMinutes,dose)};
-   review.maxRpe=Math.min(candidate.maxOverallRpe,Math.max(...week.map(x=>x.rpe)));
-  }
+ // New reviews use projected, per-week ceilings; legacy archived reviews retain their own policy.
+ const original=context.currentIntensity?{...context.profile,details:{...context.profile.details,intensity:context.currentIntensity}}:{...context.profile};
+ const observedRuns=new Set(week.map(x=>x.date)).size;
+ if(original.details)original.details={...original.details,recentRuns:observedRuns};
+ const i=original.details?.intensity;
+ const healthy=!reduce&&c.complete&&c.fatigue<=2&&c.sleep>=3&&c.readiness>=4;
+ const qualityEligible=healthy&&i?.restriction==='none'&&i?.preference==='balanced'&&i?.recentQuality!=='unspecified'&&['returning','regular','experienced'].includes(original.details?.experience)&&original.details.experienceMonths>=6&&original.weeksConsistent>=8&&observedRuns>=3&&km>=12&&longest>=3&&c.maxMinutes>=30&&daysBetween(today,original.targetDate)>21;
+ let quality;
+ if(qualityEligible){
+  const candidate=intensityPolicy({...original,review:undefined,weeklyKm:km});
+  const practiced=planned.filter(x=>ids.has(x.id)&&x.workout&&qualityTypes.includes(x.workout.type)&&week.some(log=>log.id===x.id&&log.minutes>=Number(x.minutes)*.95&&log.rpe>=4&&(Number(x.km)===0||log.km>=Number(x.km)*.9)));
+  const dose=practiced.length?Math.max(...practiced.map(x=>workoutStats(x.workout).hardMinutes)):8;
+  const peak=practiced.length?Math.max(...practiced.map(x=>workoutStats(x.workout).peak)):6;
+  const maxPeakRpe=Math.min(candidate.maxQuality?candidate.maxPeakRpe:6,peak);
+  quality={allowedTypes:['fartlek',...(maxPeakRpe>=6?['tempo']:[]),'interval'],maxPeakRpe,maxHardMinutes:Math.min(candidate.maxQuality?candidate.maxHardMinutes:8,dose)};
  }
+ const baseMinutes=Math.min(c.maxMinutes*Math.max(0,c.days.length-1)+c.longMinutes,Math.max(minutes,Math.min(plannedMinutes,minutes*1.5)));
+ const baseSessionKm=Math.min(longest*1.15,Math.max(longest,...planned.map(x=>Number(x.km)||0)));
+ const baseSessionMinutes=Math.min(duration*1.5,Math.max(duration,...planned.map(x=>Number(x.minutes)||0)));
+ const baseLoad=Math.max(load,baseMinutes*3);
+ const firstFactor=reduce?.8:good?1.05:1,step=reduce?1.08:good?1.06:1.05;
+ const count=Math.ceil(Math.min(28,daysBetween(today,original.targetDate))/7);
+ const weeks=Array.from({length:count},(_,index)=>{
+  const taper=daysBetween(addDate(today,index*7),original.targetDate)<=14;
+  const factor=firstFactor*Math.pow(step,index)*(taper?.8:1);
+  return {week:index+1,maxWeeklyKm:floor(Math.min(200,km*factor)),maxWeeklyMinutes:floor(Math.min(3600,baseMinutes*factor)),maxSessionKm:floor(Math.min(150,baseSessionKm*factor)),maxSessionMinutes:floor(Math.min(600,Math.max(c.maxMinutes,c.longMinutes),baseSessionMinutes*factor)),maxRpe:quality?5:4,maxLoad:floor(Math.min(36000,baseLoad*factor)),condition:index===0?'Reavaliar antes de começar se houver dor, doença ou piora da recuperação.':'Projeção: avançar somente com recuperação favorável e sem dor/doença; revisar no próximo fechamento.'};
+ });
+ const review={sourcePlanId:context.sourcePlanId,weekStart:start,weekEnd:end,decision,reason,observedKm:floor(km),observedMinutes:floor(minutes),...Object.fromEntries(Object.entries(weeks[0]).filter(([key])=>!['week','condition'].includes(key))),...(quality?{quality}:{}),policy:'progressive-v1',weeks};
+ const comparisons=planned.map((p,index)=>{const actual=week.find(x=>x.id===p.id);return {reference:'session-'+(index+1),date:p.date,planned:{km:Number(p.km),minutes:Number(p.minutes),rpe:Number(p.rpe)},performed:actual?{km:actual.km,minutes:actual.minutes,rpe:actual.rpe,notes:actual.notes}:null,...(actual?{distanceDeltaKm:floor(actual.km)-Number(p.km),durationDeltaMinutes:floor(actual.minutes)-Number(p.minutes),plannedPaceMinutesPerKm:Number(p.km)>0?Math.round(Number(p.minutes)/Number(p.km)*100)/100:null,performedPaceMinutesPerKm:actual.km>0?Math.round(actual.minutes/actual.km*100)/100:null,executionChanged:actual.km>Number(p.km)*1.1||actual.minutes<Number(p.minutes)*.9||actual.rpe>Number(p.rpe)+1}:{})};});
 
  const profile=validateProfile({...original,startDate:today,weeklyKm:Math.min(200,km),longestKm:longest,days:c.days,maxMinutes:c.maxMinutes,longMinutes:c.longMinutes,consent:true,
   ...(original.details?{details:{...original.details,...(original.details.intensity?{intensity:{...original.details.intensity,fatigue:c.fatigue,sleep:c.sleep}}:{}),longDay:c.days.includes(original.details.longDay)?original.details.longDay:null}}:{}),review},today,{allowReview:true});
  const existingPhases=Array.isArray(context.existingPhases)?context.existingPhases.slice(0,12).map(x=>({start:x.start,end:x.end,title:String(x.title||'').slice(0,100),focus:String(x.focus||'').slice(0,500)})):[];
  const upcoming=Array.isArray(context.upcoming)?context.upcoming.slice(0,28).map(x=>({date:x.date,title:String(x.title||'').slice(0,120),km:Number(x.km),minutes:Number(x.minutes),rpe:Number(x.rpe),long:x.long===true})):[];
- const evidence={...(recovery?{dailyRecovery:recovery}:{}),existingPhases,upcoming,weekStart:start,weekEnd:end,checkin:c,planned:planned.map(({id,...x})=>x),performed:logs.map(({id,...x})=>x),completion,plannedKm,plannedMinutes,performedKm:km,performedMinutes:minutes,perceivedLoad:load,limits:review};
+ const evidence={comparisons,...(recovery?{dailyRecovery:recovery}:{}),existingPhases,upcoming,weekStart:start,weekEnd:end,checkin:c,planned:planned.map(({id,...x})=>x),performed:logs.map(({id,...x})=>x),completion,plannedKm,plannedMinutes,performedKm:km,performedMinutes:minutes,perceivedLoad:load,limits:review};
  return {profile,evidence};
 }

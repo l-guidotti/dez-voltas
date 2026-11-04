@@ -11,6 +11,11 @@ export function validateIntensity(raw){
 export function intensityPolicy(p){
  const d=p?.details||{},i=d.intensity,preparation=Number.isFinite(p.preparationDays)?p.preparationDays:(Date.parse(p.targetDate)-Date.parse(p.startDate))/86400000;
  const base={level:'base',allowedTypes:['recovery','easy','long'],maxPeakRpe:4,maxOverallRpe:4,maxQuality:0,maxHardMinutes:0,maxHardFraction:0,reason:'Priorizar base: complete os dados de experiência, qualidade recente e recuperação para avaliar outras sessões.'};
+ if(p.review?.policy==='progressive-v1'){
+  const q=p.review.quality;
+  if(!q||p.review.decision==='reduce'||p.pain!=='none'||i?.restriction!=='none'||i?.preference!=='balanced')return {...base,reason:'A revisão atual pede recuperação ou não sustenta qualidade neste bloco.'};
+  return {level:'progressive',allowedTypes:[...base.allowedTypes,...q.allowedTypes],maxPeakRpe:q.maxPeakRpe,maxOverallRpe:p.review.maxRpe,maxQuality:1,maxHardMinutes:q.maxHardMinutes,maxHardFraction:.15,minIntervalRpe:5,reason:'Introdução ou continuidade de qualidade controlada com base na execução e recuperação, sem exigir que já constasse no plano anterior.'};
+ }
  if(!i||i.recentQuality==='unspecified'||p.pain!=='none'||i.restriction!=='none'||i.preference==='conservative'||i.fatigue==null||i.fatigue>2||i.sleep==null||i.sleep<3||p.weeklyKm<25||p.longestKm<5||p.weeksConsistent<8||!['regular','experienced'].includes(d.experience)||d.experienceMonths<6||d.experienceMonths==null||d.recentRuns<3||d.recentRuns==null||p.days.length<3||p.maxMinutes<30||!(preparation>21))return {...base,reason:i?'Base e recuperação atuais não sustentam uma sessão de qualidade neste bloco; não é liberação clínica para esforço.':base.reason};
  let policy={level:'intro',allowedTypes:[...base.allowedTypes,'fartlek'],maxPeakRpe:5,maxOverallRpe:4,maxQuality:1,maxHardMinutes:8,maxHardFraction:.1,reason:'Base regular permite avaliar fartlek moderado, com dose curta e maior parte do tempo fácil.'};
  if(i.recentQuality==='weekly'&&i.qualityWeeks>=4&&p.weeklyKm>=30&&p.weeksConsistent>=12&&d.experienceMonths>=12)policy={...policy,level:'regular',allowedTypes:[...base.allowedTypes,'fartlek','tempo'],maxPeakRpe:7,maxOverallRpe:5,maxHardMinutes:15,maxHardFraction:.15,reason:'Consistência e qualidade recente permitem avaliar fartlek e ritmo controlado.'};
@@ -43,7 +48,7 @@ export function validateWorkout(raw,session,policy){
   if(['easy','recovery'].includes(raw.type)&&b.phase==='work'&&(b.repeats!==1||b.recoveryMinutes!==0))throw Error('Rodagem e regenerativo devem ter parte principal contínua.');
   if(!quality&&b.rpe>(raw.type==='recovery'?3:4))throw Error('Rodagem, regenerativo e longo devem permanecer confortáveis.');
   if(b.phase==='work'&&b.rpe>=5){
-   if(raw.type==='interval'&&(b.rpe<7||b.minutes>4||b.repeats<2||b.recoveryMinutes<=0))throw Error('Intervalado deve ter repetições e recuperação explícita, sem tiros máximos.');
+   if(raw.type==='interval'&&(b.rpe<(policy.minIntervalRpe||7)||b.minutes>4||b.repeats<2||b.recoveryMinutes<=0))throw Error('Intervalado deve ter repetições e recuperação explícita, sem tiros máximos.');
    if(raw.type==='tempo'&&(b.rpe<6||b.rpe>7||b.minutes<3||b.minutes>20))throw Error('Ritmo deve ter blocos fortes e sustentáveis.');
    if(raw.type==='fartlek'&&(b.minutes>(policy.level==='intro'?2:5)||b.recoveryMinutes<=0))throw Error('Fartlek deve alternar trechos controlados e recuperação explícita.');
   }

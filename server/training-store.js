@@ -7,7 +7,7 @@ export async function trainingStore({request,env,user,access,readBody,fail}){
   const r=await fetch(origin+'/rest/v1/'+path,{method:body===undefined?'GET':'POST',headers,signal:AbortSignal.timeout(20000),...(body===undefined?{}:{body:JSON.stringify(body)})});
   const data=await r.json();if(!r.ok){if(data?.code==='40001')throw fail(409,'Este registro foi alterado em outro aparelho. Sincronize novamente.');throw fail(r.status===401?401:502,'Não foi possível sincronizar. A cópia local foi preservada.');}return data;
  }
- function requireCompatible(rows){if(request.headers.get('x-dv-training-format')!=='3'&&rows.some(row=>row.kind==='sessions'&&row.data?.workout||[row.data?.profile,row.data?.draft,row.data?.form_profile].some(p=>p?.goal==='backyard')))throw fail(426,'Atualize o PWA para sincronizar a unidade das metas e as etapas dos treinos. As cópias foram preservadas.');}
+ function requireCompatible(rows){if(request.headers.get('x-dv-training-format')!=='4'&&rows.some(row=>row.kind==='sessions'&&row.data?.workout||[row.data?.profile,row.data?.draft,row.data?.form_profile].some(p=>p?.goal==='backyard')))throw fail(426,'Atualize o PWA para sincronizar a unidade das metas e as etapas dos treinos. As cópias foram preservadas.');}
  async function read(cursor){
   for(let attempt=0;attempt<2;attempt++){
    const remote=await rest('rpc/read_training_store',{since_cursor:cursor});if(remote.initialized){requireCompatible(remote.rows);return remote;}

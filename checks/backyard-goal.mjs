@@ -51,7 +51,7 @@ globalThis.fetch=async(url,options)=>{
  if(url.endsWith('/enqueue_ai_generation')){admitted++;const body=JSON.parse(options.body);assert.equal(body.job_profile.target,134.112);return Response.json({id:'job',status:'queued'});}
  throw Error('Unexpected endpoint '+url);
 };
-const request=(body,format='3')=>new Request(env.APP_ORIGIN+'/api/training/suggest',{method:'POST',headers:{origin:env.APP_ORIGIN,cookie:'__Host-dv-access=access','content-type':'application/json','x-dv-training-format':format},body:JSON.stringify(body)});
+const request=(body,format='4')=>new Request(env.APP_ORIGIN+'/api/training/suggest',{method:'POST',headers:{origin:env.APP_ORIGIN,cookie:'__Host-dv-access=access','content-type':'application/json','x-dv-training-format':format},body:JSON.stringify(body)});
 // API dates are anchored to the current day, independently of deterministic fixtures above.
 const {localToday}=await import('../dist/training-contract.js');const current={...legacy,startDate:localToday(),targetDate:addDate(localToday(),120)};
 assert.equal((await handleApi(request(current),env)).status,400);
@@ -60,7 +60,7 @@ assert.equal(admitted,0);assert.equal((await handleApi(request(validateProfile(c
 globalThis.fetch=async()=>Response.json({initialized:true,cursor:1,rows:[{kind:'profiles',data:{draft:profile}}]});
 const storeArgs={env,user:{id:'owner'},access:'access',fail:(status,message)=>Object.assign(Error(message),{status})};
 await assert.rejects(trainingStore({...storeArgs,request:new Request(env.APP_ORIGIN+'/api/account/sync',{headers:{'x-dv-training-format':'2'}})}),e=>e.status===426);
-assert.equal((await trainingStore({...storeArgs,request:new Request(env.APP_ORIGIN+'/api/account/sync',{headers:{'x-dv-training-format':'3'}})})).cursor,1);
+assert.equal((await trainingStore({...storeArgs,request:new Request(env.APP_ORIGIN+'/api/account/sync',{headers:{'x-dv-training-format':'4'}})})).cursor,1);
 let initialized=0;
 globalThis.fetch=async(url)=>{
  if(url.endsWith('/rpc/read_training_store'))return Response.json({initialized:false,rows:[]});

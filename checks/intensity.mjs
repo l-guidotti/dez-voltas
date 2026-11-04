@@ -49,10 +49,10 @@ const reviewed=prepareWeeklyReview(context,weeklyToday).profile;assert.equal(rev
 const tired=prepareWeeklyReview({...context,checkin:{...report,fatigue:4}},weeklyToday).profile;assert.equal(intensityPolicy(tired).maxQuality,0);
 const incomplete=prepareWeeklyReview({...context,checkin:{...report,complete:false}},weeklyToday).profile;assert.equal(intensityPolicy(incomplete).maxQuality,0);
 const restrictedNow=prepareWeeklyReview({...context,currentIntensity:{...profile.details.intensity,restriction:'yes'}},weeklyToday).profile;assert.equal(intensityPolicy(restrictedNow).maxQuality,0);
-const unpracticed=prepareWeeklyReview({...context,planned:planned.map(s=>({...s,workout:null}))},weeklyToday).profile;assert.equal(intensityPolicy(unpracticed).maxQuality,0);
+const unpracticed=prepareWeeklyReview({...context,planned:planned.map(s=>({...s,workout:null}))},weeklyToday).profile;assert.equal(intensityPolicy(unpracticed).maxQuality,1);
 const remote={initialized:true,cursor:1,rows:[...documentRows(doc,owner).values()].map(r=>({...r,revision:1}))};
 globalThis.fetch=async()=>Response.json(remote);
 const storeArgs={env:{SUPABASE_URL:'https://supabase.example',SUPABASE_ANON_KEY:'pub'},user:{id:owner},access:'access',readBody:async()=>({}),fail:(status,message)=>Object.assign(new Error(message),{status})};
 await assert.rejects(()=>trainingStore({...storeArgs,request:new Request('https://example.com/api/account/sync')}),e=>e.status===426);
-assert.equal((await trainingStore({...storeArgs,request:new Request('https://example.com/api/account/sync',{headers:{'x-dv-training-format':'3'}})})).cursor,1);
-console.log('PASS: revisão preserva dose/pico de qualidade registrada, fadiga/incompletude retiram qualidade; clientes antigos não perdem etapas na sincronização.');
+assert.equal((await trainingStore({...storeArgs,request:new Request('https://example.com/api/account/sync',{headers:{'x-dv-training-format':'4'}})})).cursor,1);
+console.log('PASS: revisão preserva dose/pico praticados e pode introduzir qualidade, fadiga/incompletude retiram qualidade; clientes antigos não perdem etapas na sincronização.');
