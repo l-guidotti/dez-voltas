@@ -7,12 +7,14 @@ export async function trainingStore({request,env,user,access,readBody,fail}){
   const r=await fetch(origin+'/rest/v1/'+path,{method:body===undefined?'GET':'POST',headers,signal:AbortSignal.timeout(20000),...(body===undefined?{}:{body:JSON.stringify(body)})});
   const data=await r.json();if(!r.ok){if(data?.code==='40001')throw fail(409,'Este registro foi alterado em outro aparelho. Sincronize novamente.');throw fail(r.status===401?401:502,'Não foi possível sincronizar. A cópia local foi preservada.');}return data;
  }
+ function requireCompatible(rows){if(request.headers.get('x-dv-training-format')!=='3'&&rows.some(row=>row.kind==='sessions'&&row.data?.workout||[row.data?.profile,row.data?.draft,row.data?.form_profile].some(p=>p?.goal==='backyard')))throw fail(426,'Atualize o PWA para sincronizar a unidade das metas e as etapas dos treinos. As cópias foram preservadas.');}
  async function read(cursor){
   for(let attempt=0;attempt<2;attempt++){
-   const remote=await rest('rpc/read_training_store',{since_cursor:cursor});if(remote.initialized){if(request.headers.get('x-dv-training-format')!=='2'&&remote.rows.some(row=>row.kind==='sessions'&&row.data?.workout))throw fail(426,'Atualize o PWA para sincronizar treinos com etapas. As cópias foram preservadas.');return remote;}
+   const remote=await rest('rpc/read_training_store',{since_cursor:cursor});if(remote.initialized){requireCompatible(remote.rows);return remote;}
    const legacy=(await rest('account_data?user_id=eq.'+encodeURIComponent(user.id)+'&select=revision,document'))[0];
    const empty={version:1,profile:null,draft:null,archive:{version:1,owner:user.id,plans:[]},state:{version:1,logs:{},checklist:{},timer:null}};
    let rows;try{rows=[...documentRows(validateAccountDocument(legacy?.document||empty,user.id),user.id).values()].map(row=>({...row,revision:0}));}catch{throw fail(502,'Não foi possível migrar os dados antigos. A cópia original foi preservada.');}
+   requireCompatible(rows);
    try{return await rest('rpc/initialize_training_store',{expected_legacy_revision:legacy?.revision||0,initial_rows:rows});}catch(e){if(e.status!==409||attempt)throw e;}
   }
  }

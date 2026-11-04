@@ -1,4 +1,4 @@
-import {validateProfile,validateSuggestion} from './training-contract.js';
+import {validateProfile,validateSuggestion,backyardLaps} from './training-contract.js';
 export const PLAN_ARCHIVE_KEY='dez-voltas-active-plans-v1';
 const empty=()=>({version:1,owner:null,plans:[]});
 const clone=x=>JSON.parse(JSON.stringify(x));
@@ -9,7 +9,12 @@ export function checkedSuggestion(raw){
  if(typeof raw.generatedAt!=='string'||raw.generatedAt.length>80||!Number.isFinite(Date.parse(raw.generatedAt)))throw new Error('Data de geração inválida.');
  return {version:1,profile,plan,generatedAt:raw.generatedAt,model:String(raw.model||'Gemini').slice(0,120)};
 }
-function planId(result,owner){const text=owner+JSON.stringify(result);let h=2166136261;for(let i=0;i<text.length;i++)h=Math.imul(h^text.charCodeAt(i),16777619);return 'ai-'+Date.parse(result.generatedAt).toString(36)+'-'+(h>>>0).toString(36);}
+function planId(result,owner){
+ // Preserve existing plan/session IDs when the equivalent goal moves from laps to km.
+ let identity=result;
+ if(result.profile.goal==='backyard'){const profile={...result.profile,target:backyardLaps(result.profile)};delete profile.targetUnit;identity={...result,profile};}
+ const text=owner+JSON.stringify(identity);let h=2166136261;for(let i=0;i<text.length;i++)h=Math.imul(h^text.charCodeAt(i),16777619);return 'ai-'+Date.parse(result.generatedAt).toString(36)+'-'+(h>>>0).toString(36);
+}
 export function validatePlanArchive(raw){
  if(raw?.version!==1||!Array.isArray(raw.plans)||raw.plans.length>100)throw new Error('Arquivo de planos inválido.');
  const out={version:1,owner:raw.owner===null?null:ownerId(raw.owner),plans:[]},ids=new Set(),activeOwners=new Set();

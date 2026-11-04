@@ -8,6 +8,9 @@ export function dateOnly(value) {
 export function addDate(date, days) { return new Date(Date.parse(date+'T12:00:00Z')+days*86400000).toISOString().slice(0,10); }
 export function daysBetween(a,b) { return Math.round((Date.parse(b+'T12:00:00Z')-Date.parse(a+'T12:00:00Z'))/86400000); }
 export function localToday() { return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()); }
+export const BACKYARD_LAP_KM=6.7056;
+export const backyardKm=laps=>Math.round(laps*BACKYARD_LAP_KM*10000)/10000;
+export function backyardLaps(profile){if(profile.target===''||profile.target==null)return profile.target;return profile.targetUnit==='km'?Math.round(profile.target/BACKYARD_LAP_KM*1000000)/1000000:profile.target;}
 const finite = (x,min,max,label) => { if(typeof x!=='number'||!Number.isFinite(x)||x<min||x>max) throw new Error('Confira '+label+'.'); return x; };
 export function validateProfile(raw, today=localToday(), {requireConsent=true,allowReview=false}={}) {
   if (!raw || typeof raw !== 'object') throw new Error('Preencha seu perfil.');
@@ -18,8 +21,15 @@ export function validateProfile(raw, today=localToday(), {requireConsent=true,al
   const preparationDays=daysBetween(startDate,targetDate);
   if(preparationDays<(review?1:14)||preparationDays>730) throw new Error('A preparação precisa ter entre 14 dias e dois anos.');
   if(!['distance','time','backyard'].includes(raw.goal)) throw new Error('Selecione o objetivo.');
-  const target=finite(raw.target,1,raw.goal==='time'?1440:raw.goal==='backyard'?48:200,'a meta');
-  if(raw.goal==='backyard'&&!Number.isInteger(target)) throw new Error('Informe um número inteiro de voltas.');
+  let target;
+  if(raw.goal==='backyard'){
+    if(raw.targetUnit!==undefined&&!['km','laps'].includes(raw.targetUnit))throw new Error('Unidade da meta backyard inválida.');
+    const laps=backyardLaps(raw);
+    finite(laps,1,48,'a meta');
+    if(!Number.isInteger(laps))throw new Error('Informe um número inteiro de voltas.');
+    target=backyardKm(laps);
+    if(raw.targetUnit==='km'&&(typeof raw.target!=='number'||!Number.isFinite(raw.target)||Math.abs(raw.target-target)>0.000001))throw new Error('A distância backyard precisa corresponder a voltas completas.');
+  }else target=finite(raw.target,1,raw.goal==='time'?1440:200,'a meta');
   const weeklyKm=finite(raw.weeklyKm,0,200,'o volume médio recente');
   const longestKm=finite(raw.longestKm,0,150,'o maior treino recente');
   const weeksConsistent=finite(raw.weeksConsistent,0,520,'as semanas de consistência');
@@ -30,7 +40,7 @@ export function validateProfile(raw, today=localToday(), {requireConsent=true,al
   const longMinutes=finite(raw.longMinutes,review?20:30,600,'o tempo disponível para o longo');
   if(!['none','current','return'].includes(raw.pain)) throw new Error('Informe a situação de dores.');
   if(requireConsent&&raw.consent!==true) throw new Error('Autorize o envio dos dados de treino ao Gemini.');
-  return {...(review?{review}:{}),goal:raw.goal,target,startDate,targetDate,preparationDays,weeklyKm,longestKm,weeksConsistent,days:[...days].sort(),maxMinutes,longMinutes,pain:raw.pain,consent:raw.consent===true,...(raw.details!==undefined?{details:validateDetails(raw.details,days,raw.goal)}:{})};
+  return {...(review?{review}:{}),goal:raw.goal,target,...(raw.goal==='backyard'?{targetUnit:'km'}:{}),startDate,targetDate,preparationDays,weeklyKm,longestKm,weeksConsistent,days:[...days].sort(),maxMinutes,longMinutes,pain:raw.pain,consent:raw.consent===true,...(raw.details!==undefined?{details:validateDetails(raw.details,days,raw.goal)}:{})};
 }
 export function validateStoredProfile(raw,today=raw?.startDate||localToday()){return validateProfile(raw,today,{requireConsent:false,allowReview:true});}
 function validateReviewLimits(raw){
@@ -51,7 +61,7 @@ function validateDetails(raw,days,goal){
  return {...(raw.intensity!==undefined?{intensity:validateIntensity(raw.intensity)}:{}),registrationCompleted:raw.registrationCompleted===true,eventName:eventName.trim(),terrain:choice(raw.terrain,['unspecified','road','trail','mixed','treadmill'],'o terreno'),elevationM:optionalNumber(raw.elevationM,0,20000,'o desnível positivo'),experience:choice(raw.experience,['unspecified','beginner','returning','regular','experienced'],'sua experiência'),experienceMonths:optionalNumber(raw.experienceMonths,0,600,'os meses de experiência',true),recentRuns:optionalNumber(raw.recentRuns,0,7,'os dias recentes de corrida',true),longDay,finishMinutes};
 }
 const text = (value,max=1500) => { if(typeof value!=='string'||!value.trim()||value.length>max) throw new Error('A sugestão contém texto inválido.');return value; };
-export function validateSuggestion(raw,p,{requireWorkouts=false}={}) {
+export function validateSuggestion(raw,p,{requireWorkouts=false,deriveTotals=false}={}) {
   const policy=intensityPolicy(p);
   if(!raw||!Array.isArray(raw.phases)||!Array.isArray(raw.weeks)||!Array.isArray(raw.warnings)) throw new Error('O Gemini não retornou um plano válido.');
   const detailedDays=Math.min(28,p.preparationDays), count=Math.ceil(detailedDays/7);
@@ -81,7 +91,8 @@ export function validateSuggestion(raw,p,{requireWorkouts=false}={}) {
       total+=km;return session;
     });
     if(sessions.filter(s=>s.long).length>1) throw new Error('Mais de um longo na mesma semana.');
-    if(Math.abs(finite(w.totalKm,0,300,'o total semanal')-total)>.15) throw new Error('O total semanal não corresponde às sessões.');
+    // Only the provider boundary derives totals. Stored/imported plans still require consistency.
+    if(!deriveTotals&&Math.abs(finite(w.totalKm,0,300,'o total semanal')-total)>.15) throw new Error('O total semanal não corresponde às sessões.');
     // Product guardrails for initial suggestions, not a universal injury-prevention formula.
     if(total>(p.review?p.review.maxWeeklyKm:Math.max(p.weeklyKm,6)*Math.pow(1.15,i))+(p.review?.05:.2)) throw new Error('A sugestão aumentou demais o volume recente. Gere outra sugestão ou revise seu perfil.');
     if(sessions.some(s=>s.km>(p.review?p.review.maxSessionKm:Math.max(p.longestKm,3)*Math.pow(1.15,i))+(p.review?.05:.2))) throw new Error('O longo sugerido excede o limite inicial do perfil.');

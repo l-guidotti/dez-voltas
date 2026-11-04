@@ -1,6 +1,7 @@
 import {validateStoredProfile,daysBetween} from './training-contract.js';
+export {backyardLaps} from './training-contract.js';
 export function objectiveContext(active,owner,read){
- if(active)return {profile:active.profile,source:'active'};
+ if(active)return {profile:validateStoredProfile(active.profile,active.profile.startDate),source:'active'};
  if(!owner)return null;
  for(const [key,nested]of [['dez-voltas-draft-v1:',false],['dez-voltas-profile-v1:',true]])try{const raw=JSON.parse(read(key+owner)||'null'),profile=nested?raw?.profile:raw;if(profile)return {profile:validateStoredProfile(profile,profile.startDate),source:'profile'};}catch{}
  return null;

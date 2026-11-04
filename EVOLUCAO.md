@@ -64,6 +64,10 @@ order by start_time desc limit 10;
 
 ## Verificação
 
+O total semanal das respostas Gemini é calculado pelo servidor a partir das distâncias das sessões, antes de persistir o resultado. O formato solicitado ao modelo não inclui `totalKm`. As sessões continuam sujeitas aos limites de distância, duração, esforço, recuperação e calendário; importações e planos armazenados continuam exigindo total consistente. Isso evita descartar uma revisão válida apenas por erro aritmético do modelo, sem nova chamada ao provedor.
+
+A seção Plano consulta o estado da tarefa da própria conta e distingue fila, processamento, retentativa, resultado pronto e falha, incluindo a mensagem da falha. O fechamento e sua autorização continuam obrigatórios a cada semana. A correção não reenvia automaticamente tarefas que já falharam. Cache v31 entrega a interface atualizada aos PWAs instalados.
+
 `npm test`: cenários de manter/reduzir/progressão, dados incompletos, dores, doença, disponibilidade, esforço/carga, ausência de aumentos compostos, meta temporal, proximidade da prova, adoção/sincronização, autorização, worker da fila e troca de conta. Gemini e navegador são simulados. `checks/weekly-review.sql` verifica no banco, com rollback, semana elegível, concorrência por revisão, consentimento, congelamento, retrato do diário, idempotência da fila e isolamento de contas; executar com fila ociosa.
 
 O teste de transporte em produção usa uma conta temporária e dor informada para confirmar cron → fila → worker → conclusão sem chamar Gemini. As contas temporárias são removidas depois. Não há geração faturável automática nem teste visual em navegador nesta entrega.

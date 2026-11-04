@@ -31,7 +31,7 @@ globalThis.fetch=async(url,options={})=>{
  }
  throw Error('Unexpected endpoint '+url);
 };
-const req=(path,body,headers={})=>new Request(env.APP_ORIGIN+path,{method:body===undefined?'GET':'POST',headers:{'x-dv-training-format':'2',origin:env.APP_ORIGIN,cookie:'__Host-dv-access=access','content-type':'application/json','x-account-id':'owner-a',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});
+const req=(path,body,headers={})=>new Request(env.APP_ORIGIN+path,{method:body===undefined?'GET':'POST',headers:{'x-dv-training-format':'3',origin:env.APP_ORIGIN,cookie:'__Host-dv-access=access','content-type':'application/json','x-account-id':'owner-a',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});
 let r=await handleApi(req('/api/training/suggest',profile,{'idempotency-key':requestId}),env);assert.equal(r.status,202);assert.equal((await r.json()).job.id,id);
 assert.equal(calls.filter(c=>c.url.includes(':generateContent')).length,0,'Enqueue must not call Gemini');
 assert.equal((await handleApi(req('/api/training/suggest',profile,{'x-dv-training-format':''}),env)).status,426);
