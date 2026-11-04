@@ -1,3 +1,4 @@
+import {blueprintResponse} from './blueprint-fixture.mjs';
 import assert from 'node:assert/strict';
 import {weeklyFixture,prepareFixture} from '../scripts/weekly-review-fixture.mjs';
 import {renderReport,runLive} from '../scripts/weekly-review-lab.mjs';
@@ -15,7 +16,7 @@ const blocked=await runLive(weeklyFixture('2026-11-03','pain'),env,async()=>{cal
 assert.equal(blocked.status,'blocked');assert.equal(calls,0);
 const profile=prepared.prepared.profile;
 const raw=easyWorkouts({summary:'Cenário fictício.',feasibility:'Manter conforme recuperação.',warnings:['Revisar semanalmente.'],phases:phaseCalendar(profile).map(()=>({title:'Preparação',focus:'Continuidade.'})),weeks:trainingCalendar(profile).map(w=>({start:w.start,focus:'Manutenção.',totalKm:99,sessions:w.availableDates.map(date=>({date,title:'Rodagem',km:5,minutes:35,rpe:3,long:false,instructions:'Conversa confortável.'}))}))});
-const report=await runLive(fixture,env,async(url,options)=>{calls++;assert.equal(options.headers['x-goog-api-key'],env.GEMINI_API_KEY);return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(raw)}]}}]});});
+const report=await runLive(fixture,env,async(url,options)=>{calls++;assert.equal(options.headers['x-goog-api-key'],env.GEMINI_API_KEY);return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(blueprintResponse(JSON.parse(JSON.parse(options.body).contents[0].parts[0].text)))}]}}]});});
 assert.equal(report.status,'completed');assert.equal(calls,1);assert.equal(report.providerCalls,1);
 assert.equal(report.result.plan.weeks[0].totalKm,15);assert.ok(report.rawResponse);
 assert.ok(!JSON.stringify(report).includes(env.GEMINI_API_KEY));

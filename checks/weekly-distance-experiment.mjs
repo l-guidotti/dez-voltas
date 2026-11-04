@@ -5,6 +5,7 @@ import {easyWorkouts} from './workout-fixtures.mjs';
 import {renderDistanceExperiment} from '../scripts/render-distance-experiment.mjs';
 const fixture=weeklyFixture(),prepared=prepareFixture(fixture).prepared;
 const profile={...prepared.profile,review:{...prepared.profile.review,maxWeeklyKm:15,maxSessionKm:6,weeks:prepared.profile.review.weeks.map(w=>({...w,maxSessionKm:6}))}};
+delete profile.review.policy;delete profile.review.weeks;
 const env={APP_ORIGIN:'https://app.example',SUPABASE_URL:'https://auth.example',SUPABASE_ANON_KEY:'public',GEMINI_API_KEY:'private-key',GEMINI_MODEL:'gemini-test'};
 const model=easyWorkouts({summary:'Proposta concreta',feasibility:'Reavaliar o objetivo conforme os registros.',warnings:[],phases:phaseCalendar(profile).map(()=>({title:'Fase',focus:'Continuidade'})),weeks:trainingCalendar(profile).map(w=>({start:w.start,focus:'Consolidação',sessions:w.availableDates.map(date=>({date,title:'Rodagem',km:5.5,minutes:35,rpe:3,long:false,instructions:'Conversa confortável'}))}))});
 let sent,calls=0;
