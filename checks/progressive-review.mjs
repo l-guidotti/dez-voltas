@@ -1,3 +1,4 @@
+import {blueprintResponse} from './blueprint-fixture.mjs';
 import assert from 'node:assert/strict';
 import {weeklyFixture} from '../scripts/weekly-review-fixture.mjs';
 import {prepareWeeklyReview} from '../dist/weekly-contract.js';
@@ -36,9 +37,10 @@ const taper=prepareWeeklyReview({...ctx,profile:{...ctx.profile,targetDate:addDa
 const result={version:1,profile:p,plan,generatedAt:'2026-11-04T12:00:00Z',model:'test'},owner='progressive-owner',id=suggestionId(result,owner);
 const doc={version:1,profile:result,draft:ctx.profile,archive:{version:1,owner,plans:[{...result,id,owner,active:true}]},state:{version:1,logs:{},checklist:{},timer:null}};
 assert.equal(rowsDocument(documentRows(doc,owner),owner).archive.plans[0].id,id);assert.deepEqual(checkedSuggestion(result).profile.review,p.review);
-let sent;const response=await generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'secret'},prepared.evidence,{diagnostic:'progressive-review-preview',fetchImpl:async(url,options)=>{sent=JSON.parse(options.body);return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({...model,phases:model.phases.map(({title,focus})=>({title,focus}))})}]}}]});}});
+let sent;const response=await generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'secret'},prepared.evidence,{diagnostic:'progressive-review-preview',fetchImpl:async(url,options)=>{sent=JSON.parse(options.body);return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(blueprintResponse(JSON.parse(sent.contents[0].parts[0].text)))}]}}]});}});
 assert.equal(response.result.diagnostic.validation.accepted,true);assert.equal(response.result.diagnostic.mode,'progressive-review-preview');assert.equal(response.result.plan,null);
-assert.ok(sent.generationConfig.responseJsonSchema.properties.weeks.items.properties.sessions.items.properties.workout.properties.type.enum.includes('interval'));
+assert.ok(sent.generationConfig.responseJsonSchema.properties.weeks.items.properties.sessions.items.properties.type.enum.includes('interval'));
+assert.ok(JSON.parse(sent.contents[0].parts[0].text).sessionBlueprint);
 assert.ok(!sent.systemInstruction.parts[0].text.includes('tetos iguais em todas as semanas'));
 assert.ok(sent.systemInstruction.parts[0].text.includes('PLANEJAMENTO PROGRESSIVO'));
 console.log('PASS: revisão progressiva, RPE 7 contextualizado, introdução de fartlek/ritmo/intervalado, limites por semana, redução/retomada e polimento, arquivo/sync e captura do resultado.');

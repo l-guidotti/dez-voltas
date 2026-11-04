@@ -1,3 +1,4 @@
+import {blueprintResponse} from './blueprint-fixture.mjs';
 import {easyWorkouts} from './workout-fixtures.mjs';
 import assert from 'node:assert/strict';
 import {prepareWeeklyReview,validateWeeklyCheckin} from '../dist/weekly-contract.js';
@@ -36,22 +37,23 @@ assert.deepEqual(rowsDocument(documentRows(doc,owner),owner).archive.plans[0].pr
 const short=prepareWeeklyReview({...ctx,profile:{...old,targetDate:addDate(today,5)}},today).profile;assert.equal(short.preparationDays,5);assert.equal(validateStoredProfile(short).preparationDays,5);assert.equal(validateSuggestion(sample(short),short).weeks.length,1);
 // A review can continue a time goal recorded with zero distance.
 const timed=prepareWeeklyReview({...ctx,profile:{...old,goal:'time',target:120},planned:ctx.planned.map(x=>({...x,km:0})),logs:ctx.logs.map(x=>({...x,km:0}))},today).profile;assert.equal(timed.review.maxWeeklyKm,0);assert.ok(timed.review.maxWeeklyMinutes>0);
+const legacyWireProfile={...p,review:{...p.review}};delete legacyWireProfile.review.policy;delete legacyWireProfile.review.weeks;
 let sent;const providerPlan=()=>{const model=easyWorkouts(sample(p));return {...model,phases:model.phases.map(({title,focus})=>({title,focus}))};};
 let output=providerPlan();output.weeks[0].totalKm=99;
 globalThis.fetch=async(url,options)=>{sent=JSON.parse(options.body);return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(output)}]}}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:20}});};
-const corrected=await generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence);
+const corrected=await generateSuggestion(legacyWireProfile,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence);
 assert.equal(corrected.result.plan.weeks[0].totalKm,15,'Provider arithmetic cannot discard valid sessions');
 assert.deepEqual(corrected.usage,{input:10,output:20});
 const wire=sent.generationConfig.responseJsonSchema.properties.weeks.items;
 assert.equal(wire.properties.totalKm,undefined);assert.ok(!wire.required.includes('totalKm'));
 output=providerPlan();for(const w of output.weeks)delete w.totalKm;
-assert.equal((await generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence)).result.plan.weeks[0].totalKm,15);
+assert.equal((await generateSuggestion(legacyWireProfile,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence)).result.plan.weeks[0].totalKm,15);
 output=providerPlan();output.weeks[0].sessions.forEach(s=>s.km=5.5);output.weeks[0].totalKm=0;
-await assert.rejects(generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence),/volume/);
+await assert.rejects(generateSuggestion(legacyWireProfile,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence),/volume/);
 output=providerPlan();output.weeks[0].sessions[0].km='5';
-await assert.rejects(generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence),/distância/);
+await assert.rejects(generateSuggestion(legacyWireProfile,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence),/distância/);
 output=providerPlan();
-await generateSuggestion(p,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence);const input=JSON.parse(sent.contents[0].parts[0].text);assert.equal(input.weeklyReview.performed.length,6);assert.equal(input.weeklyReview.performed[0].id,undefined);assert.equal(input.weeklyReview.upcoming[0].title,'Rodagem prevista');assert.equal(input.weeklyReview.existingPhases[0].title,'Construção e especificidade');assert.match(sent.systemInstruction.parts[0].text,/REVISÃO SEMANAL/);
+await generateSuggestion(legacyWireProfile,{GEMINI_MODEL:'gemini-test',GEMINI_API_KEY:'private'},prepared.evidence);const input=JSON.parse(sent.contents[0].parts[0].text);assert.equal(input.weeklyReview.performed.length,6);assert.equal(input.weeklyReview.performed[0].id,undefined);assert.equal(input.weeklyReview.upcoming[0].title,'Rodagem prevista');assert.equal(input.weeklyReview.existingPhases[0].title,'Construção e especificidade');assert.match(sent.systemInstruction.parts[0].text,/REVISÃO SEMANAL/);
 assert.ok(!JSON.stringify(input).includes(owner));
 console.log('PASS: evolução com duas semanas, manter/reduzir, dor/doença, consentimento, registros incompletos, limites projetados por semana, duração/RPE/carga, meta temporal, proximidade da prova, histórico sincronizado e contexto Gemini sem IDs de conta (simulado).');
 
@@ -66,7 +68,7 @@ globalThis.fetch=async(url,options={})=>{
  if(url.endsWith('/rpc/save_weekly_review')){assert.equal(options.headers.Authorization,'Bearer access');assert.equal(body.plan_id,ctx.sourcePlanId);assert.equal(body.expected_revision,0);assert.deepEqual(body.report_data,report);return Response.json({id:'checkin',revision:1});}
  if(url.endsWith('/rpc/claim_ai_generation'))return Response.json({id:jobId,lease,kind:'weekly_review',profile:old,context:ctx});
  if(url.endsWith('/rpc/finish_ai_generation')){saved=body;return Response.json(true);}
- if(url.includes(':generateContent')){providerCalls++;const payload=JSON.parse(options.body),input=JSON.parse(payload.contents[0].parts[0].text);assert.equal(input.weeklyReview.performed.length,6);assert.ok(!options.body.includes('private@example.com'));const raw=sample(input.profile);return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({...easyWorkouts(raw),phases:raw.phases.map(({title,focus})=>({title,focus}))})}]}}]});}
+ if(url.includes(':generateContent')){providerCalls++;const payload=JSON.parse(options.body),input=JSON.parse(payload.contents[0].parts[0].text);assert.equal(input.weeklyReview.performed.length,6);assert.ok(!options.body.includes('private@example.com'));const raw=sample(input.profile);return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(input.sessionBlueprint?blueprintResponse(input):{...easyWorkouts(raw),phases:raw.phases.map(({title,focus})=>({title,focus}))})}]}}]});}
  throw Error('Unexpected endpoint '+url);
 };
 const request=(body,headers={})=>new Request(env.APP_ORIGIN+'/api/training/weekly-review',{method:body?'POST':'GET',headers:{cookie:'__Host-dv-access=access',origin:env.APP_ORIGIN,'content-type':'application/json','x-account-id':owner,...headers},...(body?{body:JSON.stringify(body)}:{})});
