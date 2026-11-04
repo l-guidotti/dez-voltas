@@ -67,7 +67,9 @@ globalThis.fetch=async(url,options)=>{
 const env={SUPABASE_URL:'https://supabase.example',SUPABASE_ANON_KEY:'publishable',APP_ORIGIN:'https://app.example'};
 const req=(body,path='sync')=>new Request('https://app.example/api/account/'+path,{method:body?'POST':'GET',headers:{origin:'https://app.example','content-type':'application/json',cookie:'__Host-dv-access=private-session'},...(body?{body:JSON.stringify(body)}:{})});
 let api=await handleApi(req(),env);assert.equal(api.status,200);assert.equal(legacyReads,1);assert.ok((await api.json()).rows.some(r=>r.kind==='diary'));
-const proposed=copy(original);proposed.state.logs[id].notes='API editada';const delta=rowChanges(db,proposed,A);assert.equal(delta.length,1);assert.equal((await handleApi(req({cursor:1,changes:delta}),env)).status,200);assert.equal(dbChanges.length,1);assert.equal(dbChanges[0].kind,'diary');
+const proposed=copy(original);proposed.state.logs[id].notes='API editada';proposed.state.logs[id].km=6.03;proposed.state.logs[id].minutes=40+59/60;const delta=rowChanges(db,proposed,A);assert.equal(delta.length,1);assert.equal((await handleApi(req({cursor:1,changes:delta}),env)).status,200);assert.equal(dbChanges.length,1);assert.equal(dbChanges[0].kind,'diary');
+assert.equal(dbChanges[0].data.km,6.03);assert.equal(dbChanges[0].data.minutes,40+59/60);
+const preciseRoundTrip=rowsDocument(documentRows(validateAccountDocument(proposed,A),A),A);assert.equal(preciseRoundTrip.state.logs[id].km,6.03);assert.equal(Math.round(preciseRoundTrip.state.logs[id].minutes*60),2459);
 assert.equal((await handleApi(req({cursor:1,changes:delta}),env)).status,409);assert.equal((await handleApi(req(undefined,'data'),env)).status,426);assert.equal((await handleApi(new Request('https://app.example/api/account/sync'),env)).status,401);
 assert.equal((await handleApi(req({cursor:1,changes:[{kind:'diary',id:'unknown',revision:0,data:log('invalid')}]}),env)).status,400);
 globalThis.fetch=originalFetch;

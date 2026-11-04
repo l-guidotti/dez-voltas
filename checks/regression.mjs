@@ -29,6 +29,24 @@ for(const route of ['plano','diario','prova','guia']){a.ctx.location.hash='#'+ro
 a.ctx.openSession('w1d0');assert.equal(a.document.querySelector('#session-dialog').open,true);
 a.events.submit({target:{id:'log-form',data:{km:'5',minutes:'38',rpe:'3',pain:'none',notes:'Confortável'}},preventDefault(){}});
 let persisted=JSON.parse(a.store.get('dez-voltas-v1'));assert.equal(persisted.logs.w1d0.km,5);assert.equal(persisted.logs.w1d0.notes,'Confortável');
+const precise=appContext();precise.ctx.openSession('w1d0');
+assert.match(precise.document.querySelector('#session-content').innerHTML,/name="seconds"/);
+precise.events.submit({target:{id:'log-form',data:{km:'6,03',minutes:'40',seconds:'30',rpe:'3',pain:'none',notes:'Preciso'}},preventDefault(){}});
+const preciseSaved=JSON.parse(precise.store.get('dez-voltas-v1'));assert.equal(preciseSaved.logs.w1d0.km,6.03);assert.equal(preciseSaved.logs.w1d0.minutes,40.5);
+const reopened=appContext(preciseSaved);reopened.ctx.openSession('w1d0');
+assert.match(reopened.document.querySelector('#session-content').innerHTML,/id="duration-field"[^>]*value="40"/);
+assert.match(reopened.document.querySelector('#session-content').innerHTML,/id="duration-seconds-field"[^>]*value="30"/);
+assert.match(reopened.ctx.renderDiary(),/6,03 km/);assert.match(reopened.ctx.renderDiary(),/40 min 30 s/);
+for(const [km,minutes,seconds]of [['6.03','40','60'],['6.031','40','30'],['6,03','40.5','0'],['6.03','0','0'],['6.03','1440','1']]){
+ reopened.events.submit({target:{id:'log-form',data:{km,minutes,seconds,rpe:'3',pain:'none'}},preventDefault(){}});
+ assert.equal(JSON.parse(reopened.store.get('dez-voltas-v1')).logs.w1d0.minutes,40.5);
+ assert.match(reopened.document.querySelector('#log-feedback').textContent,/segundos de 0 a 59/);
+}
+assert.equal(reopened.ctx.readDistance('6.03'),6.03);assert.equal(reopened.ctx.readDuration('0','1'),1/60);
+assert.equal(reopened.ctx.readDuration('1440','0'),1440);
+vm.runInContext("state.timer={id:'w1d0',elapsed:2430999,running:false,startedAt:Date.now()}",reopened.ctx);
+await reopened.events.click({target:{closest:()=>({dataset:{action:'timer-use'}})}});
+assert.equal(reopened.document.querySelector('#duration-field').value,'40');assert.equal(reopened.document.querySelector('#duration-seconds-field').value,'30');
 a=appContext(persisted);assert.equal(vm.runInContext('state.logs.w1d0.minutes',a.ctx),38);assert.equal(vm.runInContext('storageAvailable',a.ctx),true);
 a.ctx.openSession('w8d3');a.events.submit({target:{id:'log-form',data:{km:'12',minutes:'90',rpe:'3',pain:'none',notes:''}},preventDefault(){}});assert.ok(a.document.querySelector('#log-feedback').textContent.includes('futura'));assert.equal(JSON.parse(a.store.get('dez-voltas-v1')).logs.w8d3,undefined);
 assert.throws(()=>a.ctx.cleanState({logs:{w1d0:{km:5,minutes:30,rpe:99}}}));
@@ -43,7 +61,7 @@ const caches={async open(key){if(!cacheMap.has(key))cacheMap.set(key,new Map());
 const sw=vm.createContext({self:{location:{origin:'https://app.example'},addEventListener:(n,fn)=>handlers[n]=fn,skipWaiting:async()=>{},clients:{claim:async()=>{}}},caches,URL,Response,Request:class{constructor(path){this.url='https://app.example'+path;}},fetch:async req=>{if(offline)throw new Error('offline');if(new URL(req.url).pathname==='/index.html')throw new Error('Cloudflare redirects index.html; never precache this alias');return responseFile(new URL(req.url).pathname)}});
 vm.runInContext(fs.readFileSync('dist/sw.js','utf8'),sw);let pending;
 handlers.install({waitUntil:p=>pending=p});await pending;
-assert.equal(cacheMap.get('dez-voltas-v34').size,28);
+assert.equal(cacheMap.get('dez-voltas-v35').size,28);
 handlers.activate({waitUntil:p=>pending=p});await pending;
 offline=true;let result;
 handlers.fetch({request:{method:'GET',mode:'navigate',url:'https://app.example/'},respondWith:p=>result=p});const fallback=await result;assert.ok((await fallback.text()).includes('<!doctype html>'));
