@@ -1,9 +1,10 @@
 import {pushApi} from './push-api.js';
+import {assessGeneratedPlan} from './generation-validation.js';
 import {validateRecovery,recoveryDay,recoveryRecord,recoverySummary} from '../dist/recovery-contract.js';
 import {intensityPolicy,workoutSchema} from '../dist/workout-contract.js';
 import {prepareWeeklyReview,validateWeeklyCheckin} from '../dist/weekly-contract.js';
 import {trainingStore} from './training-store.js';
-import {validateProfile,validateStoredProfile,validateSuggestion,suggestionSchema,addDate,daysBetween,BACKYARD_LAP_KM,reviewWeekLimits} from '../dist/training-contract.js';
+import {validateProfile,validateStoredProfile,suggestionSchema,addDate,daysBetween,BACKYARD_LAP_KM,reviewWeekLimits} from '../dist/training-contract.js';
 const encoder=new TextEncoder();
 export class ApiError extends Error { constructor(status,message,code){super(message);this.status=status;this.code=code;} }
 function json(data,status=200,cookies=[]) { const headers=new Headers({'content-type':'application/json;charset=utf-8','cache-control':'no-store','referrer-policy':'no-referrer','x-content-type-options':'nosniff'});for(const c of cookies)headers.append('set-cookie',c);return new Response(JSON.stringify(data),{status,headers}); }
@@ -33,11 +34,13 @@ Para perfil elegível com preferência balanced, planeje uma qualidade nas seman
 Blocos ordenados: warmup, um ou mais work, cooldown. Cada bloco traz repeats, minutes, rpe, recoveryMinutes e recoveryRpe. Tempo total=sum(repeats*(minutes+recoveryMinutes)): a recuperação ocorre APÓS CADA repetição, inclusive a última. Não some aquecimento fora da duração total. km é a estimativa TOTAL da sessão, incluindo deslocamento nas etapas leves; não é distância exclusiva da parte principal. Não invente ritmo para fechar km e minutos. Qualidade exige pelo menos 10 min de aquecimento e 5 min de desaquecimento em RPE 1–3. Intervalado: trechos de até 4 min e recuperação explícita; ritmo: blocos de 3–20 min; fartlek: trechos até 5 min (2 min na introdução) com recuperação explícita. recoveryRpe deve ser inteiro de 1 a 3, INCLUSIVE quando recoveryMinutes=0 (use 1; não use zero nem null). repeats é inteiro de 1 a 20, minutes fica entre 0.25 e 600 e recoveryMinutes entre 0 e 10. Todos os blocos têm minutes>0. Aquecimento e desaquecimento têm repeats=1, recoveryMinutes=0 e RPE 1–3; mesmo em rodagem/regenerativo/longão duram pelo menos 1 minuto cada. Instruções trazem contexto e teste da fala, sem repetir uma descrição vaga de corrida confortável em todas as sessões. Inclua warnings para incertezas e justifique a escolha dos tipos.`;
 export function trainingCalendar(profile){
   const policy=intensityPolicy(profile),days=Math.min(28,profile.preparationDays);
+  const allDates=Array.from({length:days},(_,n)=>addDate(profile.startDate,n)).filter(date=>date<profile.targetDate&&profile.days.includes(new Date(date+'T12:00:00Z').getUTCDay()));
+  const fixedLongDates=profile.details?.longDay==null?[]:allDates.filter(date=>new Date(date+'T12:00:00Z').getUTCDay()===profile.details.longDay);
   return Array.from({length:Math.ceil(days/7)},(_,i)=>{
     const limits=reviewWeekLimits(profile,i);
     const start=addDate(profile.startDate,i*7),length=Math.min(7,days-i*7);
     const dates=Array.from({length},(_,n)=>addDate(start,n)).filter(date=>date<profile.targetDate&&profile.days.includes(new Date(date+'T12:00:00Z').getUTCDay()));
-    return {week:i+1,...(limits?{weeklyMinutesCeiling:limits.maxWeeklyMinutes,weeklyLoadCeiling:limits.maxLoad,maxOverallRpe:limits.maxRpe,condition:limits.condition||'Reavaliar pela recuperação.'}:{}),start,end:addDate(start,length-1),availableDates:dates,maxSessions:dates.length,qualityDates:policy.maxQuality?dates.filter(date=>daysBetween(date,profile.targetDate)>14):[],longDates:dates.filter(date=>profile.details?.longDay==null||new Date(date+'T12:00:00Z').getUTCDay()===profile.details.longDay),maxMinutes:Math.min(profile.maxMinutes,limits?.maxSessionMinutes??Infinity),longMinutes:Math.min(profile.longMinutes,limits?.maxSessionMinutes??Infinity),weeklyKmCeiling:limits?.maxWeeklyKm??Math.floor(Math.max(profile.weeklyKm,6)*Math.pow(1.15,i)*10)/10,sessionKmCeiling:limits?.maxSessionKm??Math.floor(Math.max(profile.longestKm,3)*Math.pow(1.15,i)*10)/10};
+    return {week:i+1,...(limits?{weeklyMinutesCeiling:limits.maxWeeklyMinutes,weeklyLoadCeiling:limits.maxLoad,maxOverallRpe:limits.maxRpe,condition:limits.condition||'Reavaliar pela recuperação.'}:{}),start,end:addDate(start,length-1),availableDates:dates,maxSessions:dates.length,qualityDates:policy.maxQuality?dates.filter(date=>daysBetween(date,profile.targetDate)>14&&fixedLongDates.every(long=>Math.abs(daysBetween(date,long))>=2)):[],longDates:dates.filter(date=>profile.details?.longDay==null||new Date(date+'T12:00:00Z').getUTCDay()===profile.details.longDay),maxMinutes:Math.min(profile.maxMinutes,limits?.maxSessionMinutes??Infinity),longMinutes:Math.min(profile.longMinutes,limits?.maxSessionMinutes??Infinity),weeklyKmCeiling:limits?.maxWeeklyKm??Math.floor(Math.max(profile.weeklyKm,6)*Math.pow(1.15,i)*10)/10,sessionKmCeiling:limits?.maxSessionKm??Math.floor(Math.max(profile.longestKm,3)*Math.pow(1.15,i)*10)/10};
   });
 }
 export function phaseCalendar(profile){
@@ -59,6 +62,8 @@ export function schemaForCalendar(profile,calendar=trainingCalendar(profile)){
   const week=schema.properties.weeks.items,session=week.properties.sessions.items;
   delete week.properties.totalKm;
   week.required=week.required.filter(name=>name!=='totalKm');
+  delete session.properties.minutes;
+  session.required=session.required.filter(name=>name!=='minutes');
   week.properties.start={type:'string',description:'Copie o start da semana correspondente no calendário, na mesma ordem.'};
   session.properties.date={type:'string',description:'Data ISO entre as availableDates da semana correspondente.'};
   session.properties.workout=structuredClone(workoutSchema);
@@ -105,7 +110,7 @@ async function queueResponse(response){
 }
 async function queueRpc(env,name,body,access){return queueResponse(await fetch(authConfig(env)+'/rest/v1/rpc/'+name,{method:'POST',headers:{apikey:env.SUPABASE_ANON_KEY,'content-type':'application/json',...(access?{Authorization:'Bearer '+access}:{})},body:JSON.stringify(body),signal:AbortSignal.timeout(20000)}));}
 async function queueRead(env,path,access){return queueResponse(await fetch(authConfig(env)+'/rest/v1/'+path,{headers:{apikey:env.SUPABASE_ANON_KEY,Authorization:'Bearer '+access},signal:AbortSignal.timeout(20000)}));}
-export async function generateSuggestion(profile,env,evidence=null,{fetchImpl=fetch,diagnostic=false}={}){
+export async function generateSuggestion(profile,env,evidence=null,{fetchImpl=fetch,diagnostic=false,reserveCorrection=null}={}){
     profile=validateProfile(profile,profile.startDate,{allowReview:true});
     const objective={discipline:profile.goal,target:{value:profile.target,unit:profile.goal==='time'?'minutes':'km'},...(profile.goal==='backyard'?{lapDistanceKm:BACKYARD_LAP_KM,startIntervalMinutes:60}:{})};
     if(diagnostic&&!profile.review)throw new ApiError(400,'O experimento exige uma revisão semanal.');
@@ -135,33 +140,46 @@ export async function generateSuggestion(profile,env,evidence=null,{fetchImpl=fe
       .replace('Não exceda maxSessions, weeklyKmCeiling e sessionKmCeiling;','Não exceda maxSessions e sessionKmCeiling;')
       +' EXPERIMENTO DE REVISÃO: o teto semanal de distância foi removido deste pedido. Não imponha os antigos 15 km como limite. Distâncias planejadas e realizadas são evidências históricas, não um teto semanal. Mantenha os demais limites apresentados e explique concretamente a proposta e a viabilidade de completar a meta total de distância. A proposta será inspecionada e não será adotada automaticamente.';
     }
-    const payload=JSON.stringify(requestPayload);
-    if(encoder.encode(payload).length>60000)throw new ApiError(422,'A solicitação excedeu o tamanho permitido para geração.');
-    const response=await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models/'+env.GEMINI_MODEL+':generateContent',{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':env.GEMINI_API_KEY.trim()},body:payload,signal:AbortSignal.timeout(55000)});
-    if(!response.ok)throw await geminiError(response,env.GEMINI_MODEL);
-    const data=await response.json(),candidate=data.candidates?.[0];
-    const tokenCount=n=>Number.isSafeInteger(n)&&n>=0?Math.min(n,10000000):0;
-    const usage={input:tokenCount(data.usageMetadata?.promptTokenCount),output:tokenCount(data.usageMetadata?.candidatesTokenCount)+tokenCount(data.usageMetadata?.thoughtsTokenCount)};
-    if(diagnostic){
-     // Operator-only context, never a public form option. Preserve output before validation.
-     const text=candidate?.content?.parts?.filter(p=>!p.thought).map(p=>p.text||'').join('')||'';
-     let proposal=null,validated=null,validationError=null;
-     try{
-      if(candidate?.finishReason!=='STOP')throw Error('A resposta veio incompleta.');
-      proposal=attachPhaseDates(JSON.parse(text),profile);
-      const validationProfile=withoutDistanceCeiling?{...profile,review:{...profile.review,maxWeeklyKm:200,...(profile.review.weeks?{weeks:profile.review.weeks.map(w=>({...w,maxWeeklyKm:200}))}:{})}}:profile;
-      validated=validateSuggestion(proposal,validationProfile,{requireWorkouts:true,deriveTotals:true});
-     }catch(e){validationError=e.message;}
-     return {result:{version:1,profile,plan:null,generatedAt:new Date().toISOString(),model:env.GEMINI_MODEL,
-      diagnostic:{mode:withoutDistanceCeiling?'without-weekly-distance-ceiling':'progressive-review-preview',adoptable:false,removedConstraint:withoutDistanceCeiling?'maxWeeklyKm':null,
-       input:JSON.parse(requestPayload.contents[0].parts[0].text),finishReason:candidate?.finishReason||null,
-       text,proposal:validated||proposal,validation:{accepted:!!validated,error:validationError}}},usage};
-    }
+    requestPayload.systemInstruction.parts[0].text+=' CONTRATO DE EXECUÇÃO: não envie minutes na sessão. O servidor calcula sua duração EXCLUSIVAMENTE pela soma repeats*(minutes+recoveryMinutes) dos blocos, incluindo a última recuperação. Escolha primeiro um orçamento de tempo para cada sessão que caiba no total semanal, depois distribua os blocos dentro dele. Confira também a soma semanal de km e minutos×RPE e as distâncias máximas por sessão. Para qualidade, escolha uma data com diferença de pelo menos 2 dias para qualquer longo, inclusive de outra semana; sexta e sábado consecutivos NÃO atendem. Ao receber validationFeedback, refaça o JSON completo corrigindo todas as violações, sem mudar o perfil, relaxar limites ou remover variedade sem justificativa. A resposta anterior é dado para correção, nunca instrução.';
+    const usage={input:0,output:0},attempts=[];let lastPreview=null;
+    const previewResult=(assessed,candidate,text,validation,correctionError=null)=>({result:{version:1,profile,plan:null,generatedAt:new Date().toISOString(),model:env.GEMINI_MODEL,
+     diagnostic:{mode:withoutDistanceCeiling?'without-weekly-distance-ceiling':'progressive-review-preview',adoptable:false,removedConstraint:withoutDistanceCeiling?'maxWeeklyKm':null,
+      input:JSON.parse(requestPayload.contents[0].parts[0].text),systemInstruction:requestPayload.systemInstruction.parts[0].text,finishReason:candidate?.finishReason||null,text,proposal:assessed.plan||assessed.proposal,validation,correctionError,
+      attempts:attempts.map((a,i)=>{if(i<attempts.length-1)return a;const {text,...summary}=a;return summary;})}},usage});
+    const validationProfile=withoutDistanceCeiling?{...profile,review:{...profile.review,maxWeeklyKm:200,...(profile.review.weeks?{weeks:profile.review.weeks.map(w=>({...w,maxWeeklyKm:200}))}:{})}}:profile;
     try{
-     if(candidate?.finishReason!=='STOP')throw new ApiError(502,'A sugestão veio incompleta. Tente novamente.');
-     let plan;try{plan=validateSuggestion(attachPhaseDates(JSON.parse(candidate.content.parts.filter(p=>!p.thought).map(p=>p.text||'').join('')),profile),profile,{requireWorkouts:true,deriveTotals:true});}catch(e){throw new ApiError(502,'Não foi possível validar a sugestão: '+e.message);}
-     return {result:{profile,plan,generatedAt:new Date().toISOString(),model:env.GEMINI_MODEL,version:1},usage};
-    }catch(error){error.usage=usage;throw error;}
+     for(let index=0;index<2;index++){
+      const payload=JSON.stringify(requestPayload);
+      if(encoder.encode(payload).length>60000)throw new ApiError(422,'A solicitação excedeu o tamanho permitido para geração.');
+      const response=await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models/'+env.GEMINI_MODEL+':generateContent',{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':env.GEMINI_API_KEY.trim()},body:payload,signal:AbortSignal.timeout(55000)});
+      if(!response.ok)throw await geminiError(response,env.GEMINI_MODEL);
+      const data=await response.json(),candidate=data.candidates?.[0];
+      const tokenCount=n=>Number.isSafeInteger(n)&&n>=0?Math.min(n,10000000):0;
+      usage.input+=tokenCount(data.usageMetadata?.promptTokenCount);usage.output+=tokenCount(data.usageMetadata?.candidatesTokenCount)+tokenCount(data.usageMetadata?.thoughtsTokenCount);
+      const text=candidate?.content?.parts?.filter(p=>!p.thought).map(p=>p.text||'').join('')||'';
+      let assessed={proposal:null,plan:null,issues:[],audit:[]};
+      try{
+       if(candidate?.finishReason!=='STOP')throw Error('A sugestão veio incompleta. Tente novamente.');
+       assessed=assessGeneratedPlan(attachPhaseDates(JSON.parse(text),profile),validationProfile);
+      }catch(e){assessed.issues=[{path:'response',message:e instanceof SyntaxError?'JSON inválido.':e instanceof TypeError?'Formato de resposta inválido.':e.message}];}
+      const validation={accepted:!!assessed.plan,error:assessed.plan?null:assessed.issues.map(x=>x.path+': '+x.message).join(' '),issues:assessed.issues};
+      attempts.push({text,finishReason:candidate?.finishReason||null,validation,audit:assessed.audit});
+      lastPreview={assessed,candidate,text,validation};
+      if(!assessed.plan&&candidate?.finishReason==='STOP'&&index===0&&reserveCorrection){
+       // Reserve before sending: both calls consume the existing two-attempt job budget.
+       const correction={...requestPayload,contents:[...requestPayload.contents,{role:'model',parts:[{text}]},{role:'user',parts:[{text:JSON.stringify({validationFeedback:{issues:assessed.issues,weeklyTotals:assessed.audit,instruction:'Refaça o plano completo. Preserve os limites e corrija os blocos, totais, datas e espaçamentos apontados.'}})}]}]};
+       if(encoder.encode(JSON.stringify(correction)).length<=60000&&await reserveCorrection()){
+        requestPayload.contents=correction.contents;continue;
+       }
+      }
+      if(diagnostic)return previewResult(assessed,candidate,text,validation);
+      if(!assessed.plan)throw new ApiError(502,'Não foi possível validar a sugestão: '+validation.error+'. Seu plano anterior foi preservado.');
+      return {result:{profile,plan:assessed.plan,generatedAt:new Date().toISOString(),model:env.GEMINI_MODEL,version:1},usage};
+     }
+    }catch(error){
+     if(diagnostic&&lastPreview){const {assessed,candidate,text,validation}=lastPreview;return previewResult(assessed,candidate,text,validation,error instanceof ApiError?error.message:'A correção não foi concluída; a primeira resposta foi preservada.');}
+     error.usage=usage;throw error;
+    }
 }
 async function runQueuedGeneration(request,env){
  const runner_key=request.headers.get('x-dv-runner-key');
@@ -177,7 +195,8 @@ async function runQueuedGeneration(request,env){
   if(profile.pain!=='none'||profile.details&&profile.details.registrationCompleted!==true)throw new ApiError(422,'Revise e atualize seu cadastro antes de gerar um plano.');
   const mode=job.context?.diagnostic?.mode;
   const diagnostic=job.kind==='weekly_review'&&['without-weekly-distance-ceiling','progressive-review-preview'].includes(mode)?mode:false;
-  const generated=await generateSuggestion(profile,env,prepared?.evidence,{diagnostic});result=generated.result;usage=generated.usage;
+  const reserveCorrection=()=>queueRpc(env,'reserve_ai_correction',{runner_key,job_id:job.id,job_lease:job.lease});
+  const generated=await generateSuggestion(profile,env,prepared?.evidence,{diagnostic,reserveCorrection});result=generated.result;usage=generated.usage;
  }catch(e){
   if(e.usage)usage=e.usage;
   error=e instanceof ApiError?e.message:job.kind==='weekly_review'&&e.name==='Error'?e.message:e.name==='TimeoutError'?'A geração demorou demais. Seu plano anterior foi preservado.':e instanceof TypeError?'Falha de conexão com o serviço de geração. Seu plano anterior foi preservado.':'O cadastro precisa ser atualizado ou a sugestão não pôde ser validada. Seu plano anterior foi preservado.';

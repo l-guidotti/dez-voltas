@@ -36,6 +36,7 @@ assert.equal(incomplete.result.diagnostic.text,'{"partial":true');assert.equal(i
 let finished;globalThis.fetch=async(url,options)=>{
  if(url.endsWith('/claim_ai_generation'))return Response.json({id:'job',lease:'lease',kind:'weekly_review',profile:fixture.context.profile,context:{...fixture.context,diagnostic:{mode:'without-weekly-distance-ceiling'}}});
  if(url.includes(':generateContent'))return response();
+ if(url.endsWith('/reserve_ai_correction'))return Response.json(false);
  if(url.endsWith('/finish_ai_generation')){finished=JSON.parse(options.body);return Response.json(true);}
  throw Error('Unexpected endpoint '+url);
 };
