@@ -12,10 +12,14 @@ assert.equal(comparison.total.before.minutes,360);assert.equal(comparison.total.
 assert.equal(comparison.weeks[0].comparison.after.km-comparison.weeks[0].comparison.before.km,5);
 assert.equal(comparison.weeks[3].comparison,null,'Do not label days without an older plan as zero volume');
 let html=renderPlanComparison(next,context);
-assert.match(html,/Aumento de 15 km/);assert.match(html,/25%/);assert.match(html,/7 de 28 dias/);assert.match(html,/compare-lower/);assert.match(html,/compare-higher/);
+assert.match(html,/Aumento de 15 km/);assert.match(html,/25%/);assert.match(html,/7 de 28 dias/);assert.match(html,/compare-before/);assert.match(html,/compare-after/);
 assert.match(html,/Aumento de 1 ponto de RPE/);assert.ok(!html.includes('33,3%'),'Do not present a percentage of an ordinal effort score');
 const lower=block(addDate(start,7),{id:'new',km:15,minutes:90,rpe:2});
-html=renderPlanComparison(lower,context);assert.match(html,/Redução de 15 km/);assert.ok(html.indexOf('compare-higher')<html.indexOf('compare-lower'));
+html=renderPlanComparison(lower,context);assert.match(html,/Redução de 15 km/);assert.ok(html.indexOf('compare-before')<html.indexOf('compare-after'));
+assert.match(html,/Treinos lado a lado/);assert.match(html,/Vermelho: plano anterior. Verde: nova proposta/);
+assert.equal(comparison.weeks[0].sessions[0].before.km,10);assert.equal(comparison.weeks[0].sessions[0].after.km,12.5);
+const hostile=structuredClone(next);hostile.plan.weeks[0].sessions[0].title='<img src=x onerror=alert(1)>';
+assert.ok(!renderPlanComparison(hostile,context).includes('<img'));
 assert.match(html,/Reduzir a carga pode ser adequado/);
 assert.equal(compareWeeklyPlans(block(start),context),null,'Initial suggestions have no weekly source');
 assert.equal(compareWeeklyPlans(next,{...context,owner:'another-user'}).status,'missing');

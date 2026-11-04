@@ -129,4 +129,5 @@ async function refreshJobs(manual=false,id=null){
 }
 window.addEventListener('focus',()=>{void refreshJobs();});
 window.addEventListener('online',()=>{void refreshJobs();});
+window.addEventListener('weekly-review-result',event=>{const detail=event.detail;if(detail?.owner===account?.id&&/^[0-9a-f-]{36}$/i.test(detail.id||''))void refreshJobs(true,detail.id);});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void refreshJobs();else clearTimeout(jobTimer);});

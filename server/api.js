@@ -5,7 +5,7 @@ import {validateRecovery,recoveryDay,recoveryRecord,recoverySummary} from '../di
 import {intensityPolicy,workoutSchema} from '../dist/workout-contract.js';
 import {prepareWeeklyReview,validateWeeklyCheckin} from '../dist/weekly-contract.js';
 import {trainingStore} from './training-store.js';
-import {validateProfile,validateStoredProfile,suggestionSchema,addDate,daysBetween,BACKYARD_LAP_KM,reviewWeekLimits} from '../dist/training-contract.js';
+import {validateProfile,validateStoredProfile,suggestionSchema,addDate,dateOnly,daysBetween,BACKYARD_LAP_KM,reviewWeekLimits} from '../dist/training-contract.js';
 const encoder=new TextEncoder();
 export class ApiError extends Error { constructor(status,message,code){super(message);this.status=status;this.code=code;} }
 function json(data,status=200,cookies=[]) { const headers=new Headers({'content-type':'application/json;charset=utf-8','cache-control':'no-store','referrer-policy':'no-referrer','x-content-type-options':'nosniff'});for(const c of cookies)headers.append('set-cookie',c);return new Response(JSON.stringify(data),{status,headers}); }
@@ -100,6 +100,8 @@ async function geminiError(response,model){
 }
 async function queueResponse(response){
  const data=await response.json();if(response.ok)return data;
+ const reviewMessages={CHECKIN_REQUIRED:'Salve um fechamento autorizado antes de solicitar a revisão.',WEEK_PLAN_CHANGED:'O plano em uso mudou. Atualize a tela antes de solicitar a revisão.',WEEK_REVIEW_EXPIRED:'A revisão usa uma semana encerrada nos últimos 7 dias e uma meta ainda futura. Faça o fechamento mais recente.',REVIEW_RECOVERY_BLOCKED:'O fechamento informa dor ou doença. Revise a recuperação antes de solicitar novos treinos.',REVIEW_BUSY:'Já existe uma geração em andamento na sua conta. Aguarde sua conclusão.'};
+ if(reviewMessages[data?.message])throw new ApiError(409,reviewMessages[data.message]);
  const messages={PUSH_NOT_READY:'O serviço de lembretes ainda não está pronto neste aparelho.',PUSH_DEVICE_LIMIT:'Limite de cinco aparelhos por conta atingido. Desative um aparelho antes de adicionar outro.',PUSH_DEVICE_IN_USE:'Esta assinatura já está vinculada. Desative as notificações no navegador e ative novamente.',PUSH_TEST_LIMIT:'Limite de testes atingido. Aguarde até amanhã para enviar outro teste.',USER_DAILY_LIMIT:'Você atingiu o limite de 5 solicitações hoje. Tente amanhã (limite renovado à meia-noite UTC).',QUEUE_PAUSED:'A geração está pausada temporariamente. Seu plano anterior foi preservado.',QUEUE_FULL:'A fila está cheia. Tente novamente mais tarde.'};
  if(messages[data?.message])throw new ApiError(['QUEUE_PAUSED','PUSH_NOT_READY'].includes(data.message)?503:data.message==='PUSH_DEVICE_IN_USE'?409:429,messages[data.message]);
  if(data?.code==='42501')throw new ApiError(403,'Acesso não autorizado à fila.');
@@ -241,6 +243,14 @@ export async function handleApi(request,env){try{
     if(!Number.isSafeInteger(body.revision)||body.revision<0||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.mutationId||''))throw new ApiError(400,'Confira a identificação e revisão do check-in.');
     try{return json({record:recoveryRecord(await queueRpc(env,'save_daily_recovery',{record_day:day,report_data:report,expected_revision:body.revision,mutation_id:body.mutationId},access))});}
     catch(e){if(e.status===409){const rows=(await queueRpc(env,'read_daily_recovery',{},access)).map(recoveryRecord);return json({error:'Este dia foi alterado em outro aparelho. Escolha qual registro manter.',record:rows.find(x=>x.day===day)||null},409);}throw e;}
+  }
+  if(path==='/api/training/weekly-review/retry'&&request.method==='POST'){
+    await user(request,env);const access=cookies(request)['__Host-dv-access'];
+    if(request.headers.get('x-dv-training-format')!=='4')throw new ApiError(426,'Atualize o PWA antes de solicitar uma nova revisão.');
+    const body=await bodyOf(request);
+    if(typeof body.planId!=='string'||!/^ai-[a-z0-9-]{1,100}$/.test(body.planId)||!Number.isSafeInteger(body.revision)||body.revision<1||!/^\d{4}-\d{2}-\d{2}$/.test(body.weekStart||'')||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.requestId||''))throw new ApiError(400,'Referência da revisão inválida.');
+    try{dateOnly(body.weekStart);}catch{throw new ApiError(400,'Data do fechamento inválida.');}
+    return json(await queueRpc(env,'retry_weekly_review',{plan_id:body.planId,week_start_date:body.weekStart,expected_revision:body.revision,client_request_id:body.requestId},access),202);
   }
   if(path==='/api/training/weekly-review'&&['GET','POST'].includes(request.method)){
     await user(request,env);const access=cookies(request)['__Host-dv-access'];
