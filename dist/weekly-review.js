@@ -8,7 +8,7 @@ let state=null,owner=null,planId=null,message='',busy=false,reading=false,draft=
 const changed=()=>window.dispatchEvent(new Event('weekly-review-change'));
 function identity(){const p=getActivePlan();return p&&p.owner===activeSyncOwner()?p:null;}
 async function request(body,expectedOwner){
- const r=await sessionFetch('/api/training/weekly-review',{method:body?'POST':'GET',credentials:'same-origin',headers:{'x-account-id':expectedOwner,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(25000)});
+ const r=await sessionFetch('/api/training/weekly-review',{method:body?'POST':'GET',credentials:'same-origin',headers:{'x-dv-training-format':'3','x-account-id':expectedOwner,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(25000)});
  const data=await r.json();if(!r.ok)throw Error(data.error||'Não foi possível consultar o fechamento semanal.');return data;
 }
 export async function refreshWeeklyReview(manual=false){

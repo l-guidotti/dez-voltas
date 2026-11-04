@@ -54,5 +54,5 @@ const remote={initialized:true,cursor:1,rows:[...documentRows(doc,owner).values(
 globalThis.fetch=async()=>Response.json(remote);
 const storeArgs={env:{SUPABASE_URL:'https://supabase.example',SUPABASE_ANON_KEY:'pub'},user:{id:owner},access:'access',readBody:async()=>({}),fail:(status,message)=>Object.assign(new Error(message),{status})};
 await assert.rejects(()=>trainingStore({...storeArgs,request:new Request('https://example.com/api/account/sync')}),e=>e.status===426);
-assert.equal((await trainingStore({...storeArgs,request:new Request('https://example.com/api/account/sync',{headers:{'x-dv-training-format':'2'}})})).cursor,1);
+assert.equal((await trainingStore({...storeArgs,request:new Request('https://example.com/api/account/sync',{headers:{'x-dv-training-format':'3'}})})).cursor,1);
 console.log('PASS: revisão preserva dose/pico de qualidade registrada, fadiga/incompletude retiram qualidade; clientes antigos não perdem etapas na sincronização.');
