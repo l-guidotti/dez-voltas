@@ -30,3 +30,15 @@ O protocolo passa a `x-dv-training-format: 4`, e o cache a v33, para impedir que
 O contexto interno `diagnostic.mode="progressive-review-preview"` executa o fluxo normal de preparo e prompt novos, com seus limites ativos, preservando a proposta/texto antes da conferência. O resultado tem `plan:null` e `adoptable:false`, destinado somente a diagnóstico em conta temporária. O modo anterior sem teto de distância continua separado. Nenhum modo diagnóstico é ativável pelo formulário público.
 
 `checks/progressive-review.mjs` cobre introdução dos três tipos, contexto de RPE 7, limites por semana e sua aplicação, redução/retomada, polimento, persistência/IDs e o pedido Gemini completo com provedor simulado. Os demais testes continuam verificando planos e protocolos anteriores.
+
+## Aderência do retorno do Gemini
+
+A duração de cada sessão é calculada no servidor a partir dos blocos: `sum(repeats * (minutes + recoveryMinutes))`, incluindo a recuperação da última repetição. O schema do provedor não solicita `minutes` na sessão nem `totalKm` na semana. Nenhum bloco, distância, esforço ou data é reduzido automaticamente para passar na validação. Arquivos e planos já armazenados continuam exigindo totais consistentes.
+
+O servidor confere a proposta inteira e prepara erros com o caminho do campo, totais semanais e limites concretos. Uma resposta completa e inválida pode receber uma única chamada de correção ao Gemini, com a resposta original e esse diagnóstico. A correção deve retornar o plano completo e passa novamente pelo mesmo validador. Se continuar inválida, não é oferecida como proposta adotável. Respostas incompletas e falhas de transporte continuam seguindo o tratamento existente da fila.
+
+Essa chamada adicional só é enviada após `reserve_ai_correction` autorizar a reserva atômica: capacidade privada do runner, tarefa em processamento, lease correta com tempo restante, fila habilitada, cota diária disponível e apenas uma tentativa consumida. A reserva consome a segunda tentativa da própria tarefa e da cota global; não cria um terceiro disparo. Os tokens das duas respostas são somados, inclusive quando a correção falha. A migração `20261104033134_reserve_gemini_correction.sql` deve ser aplicada antes da publicação do worker. Não modifica planos, diários ou contas.
+
+O calendário enviado já exclui, das datas sugeridas para qualidade, a véspera e o dia seguinte ao longo de dia fixo, considerando todo o bloco. O validador mantém a conferência independente de espaçamento.
+
+O relatório diagnóstico registra ambas as respostas e os erros, mantendo `plan:null` e `adoptable:false`. Passar no validador significa consistência com as regras do produto; não demonstra resultado esportivo nem garante que o provedor nunca falhará. `checks/generation-reliability.mjs` verifica duração calculada, arquivo estrito, feedback, limite de chamadas, contabilização, recusa de cota e a função SQL em PostgreSQL local.
