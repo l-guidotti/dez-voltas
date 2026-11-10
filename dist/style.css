@@ -61,3 +61,15 @@
 @media (max-width: 560px) {
  .dashboard-top.home-goal { grid-template-columns: minmax(0, 1fr); gap: 12px; }
 }
+
+.weekly-home-card {
+ margin-bottom: 18px;
+ padding: 18px 22px;
+ border: 1px solid var(--line);
+ border-radius: var(--radius);
+ background: #edf1e3;
+}
+.weekly-home-card h2 { margin: 7px 0; }
+.weekly-home-card p { margin: 0 0 12px; }
+.weekly-home-ready { background: #eef7d7; border-color: #b4cc85; }
+#weekly-apply-status:empty { display: none; }
