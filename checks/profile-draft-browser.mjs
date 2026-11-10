@@ -113,8 +113,14 @@ await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScale
  await evaluate(`document.querySelector('[data-push="disable"]').click()`);await until(()=>evaluate(`document.querySelector('#push-feedback')?.textContent.includes('desativados')`));assert.equal(pushDevices.size,0);
 
  // Daily check-in is available without an adopted plan and without a running session.
- await evaluate(`location.hash='#hoje'`);await until(()=>evaluate(`!!document.querySelector('#daily-checkin')`));
- const fillDaily=async(name,value)=>evaluate(`(()=>{const details=document.querySelector('.daily-form-details');if(details)details.open=true;const n=document.querySelector('#daily-checkin [name="${name}"]');n.focus();n.value=${JSON.stringify(value)};n.dispatchEvent(new Event('input',{bubbles:true}));n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+ const openDaily=async()=>{
+  await until(()=>evaluate(`!!document.querySelector('[data-recovery="open"]')`));
+  assert.equal(await evaluate(`document.querySelector('#daily-recovery-dialog').open`),false);
+  await evaluate(`document.querySelector('[data-recovery="open"]').click()`);
+  await until(()=>evaluate(`!!document.querySelector('#daily-recovery-dialog:modal #daily-checkin')`));
+ };
+ await evaluate(`location.hash='#hoje'`);await openDaily();
+ const fillDaily=async(name,value)=>evaluate(`(()=>{const n=document.querySelector('#daily-checkin [name="${name}"]');n.focus();n.value=${JSON.stringify(value)};n.dispatchEvent(new Event('input',{bubbles:true}));n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
  await fillDaily('fatigue','2');await fillDaily('sleep','4');await fillDaily('readiness','4');await fillDaily('pain','none');await fillDaily('notes','Recuperação sem corrida');
  await evaluate(`window.dailyInput=document.querySelector('#daily-checkin [name="notes"]');dailyInput.setSelectionRange(4,4);window.dispatchEvent(new Event('focus'))`);await pause(150);
  assert.equal(await evaluate('dailyInput.isConnected&&document.activeElement===dailyInput&&dailyInput.selectionStart===4'),true,'Daily fields must survive background sync');
@@ -122,14 +128,16 @@ await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScale
  await evaluate(`document.querySelector('#daily-checkin button[type="submit"]').click()`);await until(()=>evaluate(`document.querySelector('#daily-feedback')?.textContent.includes('sincronizados')`));
  assert.equal(dailyWrites,1);assert.equal([...dailyRows.values()][0].report.activity.type,'none');
  assert.equal(await evaluate(`document.querySelectorAll('.daily-history-entry').length`),0);
+ await evaluate(`document.querySelector('[data-recovery="close"]').click()`);
+ assert.equal(await evaluate(`document.querySelector('#daily-recovery-dialog').open`),false);
  await evaluate(`location.hash='#diario'`);
  await until(()=>evaluate(`document.querySelectorAll('#daily-recovery-history .daily-history-entry').length===1`));
- assert.equal(await evaluate(`!!document.querySelector('#diary-workouts')&&!document.querySelector('#daily-checkin')`),true);
+ assert.equal(await evaluate(`!!document.querySelector('#diary-workouts')&&!document.querySelector('#daily-recovery-dialog:modal')`),true);
  assert.match(await evaluate(`document.querySelector('.daily-history-entry').textContent`),/Recuperação sem corrida/);
  await evaluate(`document.querySelector('.daily-history-entry').open=true;window.dispatchEvent(new Event('focus'))`);await pause(150);
  assert.equal(await evaluate(`document.querySelector('.daily-history-entry').open`),true,'Reading history survives background refresh');
  await evaluate(`document.querySelector('[data-recovery="day"]').click()`);
- await until(()=>evaluate(`location.hash==='#hoje'&&!!document.querySelector('#daily-checkin')`));
+ await until(()=>evaluate(`location.hash==='#hoje'&&!!document.querySelector('#daily-recovery-dialog:modal #daily-checkin')`));
  // Explicit date changes must replace fields despite the input retaining focus.
  const originalDay=await evaluate(`document.querySelector('#daily-checkin [name="day"]').value`);
  const priorDay=new Date(Date.parse(originalDay+'T12:00:00Z')-86400000).toISOString().slice(0,10);
@@ -143,7 +151,7 @@ await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScale
  assert.match(await evaluate(`document.querySelector('[data-record-day="${priorDay}"]').textContent`),/Ontem: descanso <seguro> & recuperação/);
  assert.equal(await evaluate(`document.querySelector('.daily-history-entry seguro')`),null,'Notes must remain escaped');
  await evaluate(`document.querySelector('[data-record-day="${originalDay}"] [data-recovery="day"]').click()`);
- await until(()=>evaluate(`location.hash==='#hoje'&&!!document.querySelector('#daily-checkin')`));
+ await until(()=>evaluate(`location.hash==='#hoje'&&!!document.querySelector('#daily-recovery-dialog:modal #daily-checkin')`));
  assert.equal(await evaluate(`document.querySelector('#daily-checkin [name="day"]').value`),originalDay);
  assert.equal(await evaluate(`document.querySelector('#daily-checkin [name="notes"]').value`),'Recuperação sem corrida');
 
@@ -155,7 +163,7 @@ await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScale
  await cdp('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});await evaluate(`window.dispatchEvent(new Event('online'))`);
  await until(()=>evaluate(`document.querySelector('#daily-feedback')?.textContent.includes('sincronizados')`));assert.equal(dailyWrites,3);
  assert.equal(dailyRows.get(account.id+':'+originalDay).report.fatigue,4);
- await fillDaily('notes','Rascunho diário ainda não salvo');await cdp('Page.reload',{ignoreCache:true});await until(()=>evaluate(`!!document.querySelector('#daily-checkin')`));
+ await fillDaily('notes','Rascunho diário ainda não salvo');await cdp('Page.reload',{ignoreCache:true});await openDaily();
  assert.equal(await evaluate(`document.querySelector('#daily-checkin [name="notes"]').value`),'Rascunho diário ainda não salvo');
  await evaluate(`location.hash='#perfil'`);await until(()=>evaluate(`!!document.querySelector('#profile-goal')`));
  // Inspect the actual comparison component at mobile size, including colors and week details.
