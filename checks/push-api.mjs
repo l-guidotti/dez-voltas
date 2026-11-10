@@ -24,6 +24,6 @@ const handlers={},shown=[];let opened;
 const self={location:{origin:'https://example.com'},addEventListener:(name,fn)=>handlers[name]=fn,registration:{showNotification:async(title,options)=>shown.push({title,...options})},clients:{matchAll:async()=>[],openWindow:async url=>{opened=url}}};
 vm.runInNewContext(fs.readFileSync('dist/sw.js','utf8'),{self,URL});
 let pending;handlers.push({data:{json:()=>({type:'diary',body:'PRIVATE HEALTH DATA',url:'https://bad.example'})},waitUntil:p=>pending=p});await pending;
-assert.equal(shown[0].title,'Dez Voltas');assert.ok(!shown[0].body.includes('PRIVATE'));assert.equal(shown[0].data.url,'/#hoje');
+assert.equal(shown[0].title,'CoreAI');assert.ok(!shown[0].body.includes('PRIVATE'));assert.equal(shown[0].data.url,'/#hoje');
 handlers.notificationclick({notification:{close(){},data:{url:'https://bad.example'}},waitUntil:p=>pending=p});await pending;assert.equal(opened,'https://example.com/#hoje');
 console.log('PASS: push settings ownership/origin, endpoint validation, private bootstrap idempotence, no Gemini calls, generic notification content and safe click target.');

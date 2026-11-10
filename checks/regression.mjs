@@ -12,6 +12,9 @@ assert.equal(SESSIONS.at(-1).date,'2026-12-20');
 assert.equal(new Set(SESSIONS.map(s=>s.id)).size,32);
 for(const w of PLAN){const ss=SESSIONS.filter(s=>s.week===w.week);assert.equal(ss.reduce((n,s)=>n+s.km,0),w.total);assert.deepEqual(ss.map(s=>new Date(s.date+'T12:00:00Z').getUTCDay()),[2,3,5,0]);}
 const manifest=JSON.parse(fs.readFileSync('dist/manifest.webmanifest','utf8'));
+assert.equal(manifest.name,'CoreAI');
+assert.equal(manifest.short_name,'CoreAI');
+assert.equal(manifest.id,'/');
 assert.equal(manifest.display,'standalone');assert.equal(manifest.start_url,'/');
 for(const i of manifest.icons){assert.ok(fs.existsSync('dist'+i.src));const png=fs.readFileSync('dist'+i.src);assert.equal(png.readUInt32BE(16),Number(i.sizes.split('x')[0]));}
 const code=fs.readFileSync('dist/app.js','utf8').replace(/^import .*;\n/gm,'').replace('initProfile();','');
@@ -61,7 +64,7 @@ const caches={async open(key){if(!cacheMap.has(key))cacheMap.set(key,new Map());
 const sw=vm.createContext({self:{location:{origin:'https://app.example'},addEventListener:(n,fn)=>handlers[n]=fn,skipWaiting:async()=>{},clients:{claim:async()=>{}}},caches,URL,Response,Request:class{constructor(path){this.url='https://app.example'+path;}},fetch:async req=>{if(offline)throw new Error('offline');if(new URL(req.url).pathname==='/index.html')throw new Error('Cloudflare redirects index.html; never precache this alias');return responseFile(new URL(req.url).pathname)}});
 vm.runInContext(fs.readFileSync('dist/sw.js','utf8'),sw);let pending;
 handlers.install({waitUntil:p=>pending=p});await pending;
-assert.equal(cacheMap.get('dez-voltas-v37').size,28);
+assert.equal(cacheMap.get('dez-voltas-v38').size,28);
 handlers.activate({waitUntil:p=>pending=p});await pending;
 offline=true;let result;
 handlers.fetch({request:{method:'GET',mode:'navigate',url:'https://app.example/'},respondWith:p=>result=p});const fallback=await result;assert.ok((await fallback.text()).includes('<!doctype html>'));
