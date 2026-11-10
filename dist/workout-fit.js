@@ -20,17 +20,17 @@ export function workoutRecipe(session,{warmupMinutes=5,cooldownMinutes=5}={}){
    steps.push({name:b.phase==='warmup'?'Aquecimento':b.phase==='cooldown'?'Desaquecimento':workoutTypes[w.type],durationType:0,value:Math.round(b.minutes*60000),intensity:b.phase==='warmup'?2:b.phase==='cooldown'?3:0,notes:`RPE ${b.rpe}/10. ${b.phase==='work'?w.purpose:'Trote ou caminhada confortável.'}`});
    if(b.recoveryMinutes)steps.push({name:'Recuperação',durationType:0,value:Math.round(b.recoveryMinutes*60000),intensity:4,notes:`Trote ou caminhada em RPE ${b.recoveryRpe}/10.`});
   }
-  return {name:`CoreAI ${workoutTypes[w.type]} ${session.date}`,date:session.date,km:session.km,warmupMinutes:w.blocks[0].minutes,cooldownMinutes:w.blocks.at(-1).minutes,steps,structured:true};
+  return {name:`CorreAI ${workoutTypes[w.type]} ${session.date}`,date:session.date,km:session.km,warmupMinutes:w.blocks[0].minutes,cooldownMinutes:w.blocks.at(-1).minutes,steps,structured:true};
  }
  for(const minutes of [warmupMinutes,cooldownMinutes])if(!Number.isInteger(minutes)||minutes<0||minutes>15)throw new Error('Use de 0 a 15 minutos inteiros para aquecer e desacelerar.');
  const steps=[];
  if(warmupMinutes)steps.push({name:'Aquecimento',durationType:0,value:warmupMinutes*60000,intensity:2,notes:'Caminhar ou trotar muito leve. Sem meta de ritmo.'});
  steps.push({name:'Corrida leve',durationType:1,value:Math.round(session.km*100000),intensity:0,notes:'Converse em frases completas. Caminhe se precisar.'});
  if(cooldownMinutes)steps.push({name:'Desaquecer',durationType:0,value:cooldownMinutes*60000,intensity:3,notes:'Desacelere e caminhe confortavelmente.'});
- const name=`CoreAI S${String(session.week).padStart(2,'0')} ${session.date.slice(8,10)}-${session.date.slice(5,7)} ${session.km}km`;
+ const name=`CorreAI S${String(session.week).padStart(2,'0')} ${session.date.slice(8,10)}-${session.date.slice(5,7)} ${session.km}km`;
  return {name,date:session.date,km:session.km,warmupMinutes,cooldownMinutes,steps};
 }
-export function workoutInstructions(session,options){const r=workoutRecipe(session,options);return [`CoreAI — ${r.name}`,`Data planejada: ${r.date.split('-').reverse().join('/')}`,`Nome sugerido do modelo: ${r.structured?r.name:'CoreAI Leve '+r.km+'km'}`,`Modalidade: corrida ao ar livre`,...r.steps.map((s,i)=>`${i+1}. ${s.name}: ${s.durationType===0?s.value/60000+' min':r.km+' km'}. ${s.notes}`),r.structured?'Siga o RPE de cada etapa; sem alvo fixo de ritmo, frequência cardíaca ou potência.':'Esforço livre e confortável; sem meta fixa de ritmo, frequência cardíaca ou potência.',r.structured?'A duração inclui aquecimento, repetições, recuperações e desaquecimento.':'A distância do plano corresponde à etapa principal; aquecimento e desaquecimento também somam carga.'].join('\n');}
+export function workoutInstructions(session,options){const r=workoutRecipe(session,options);return [`CorreAI — ${r.name}`,`Data planejada: ${r.date.split('-').reverse().join('/')}`,`Nome sugerido do modelo: ${r.structured?r.name:'CorreAI Leve '+r.km+'km'}`,`Modalidade: corrida ao ar livre`,...r.steps.map((s,i)=>`${i+1}. ${s.name}: ${s.durationType===0?s.value/60000+' min':r.km+' km'}. ${s.notes}`),r.structured?'Siga o RPE de cada etapa; sem alvo fixo de ritmo, frequência cardíaca ou potência.':'Esforço livre e confortável; sem meta fixa de ritmo, frequência cardíaca ou potência.',r.structured?'A duração inclui aquecimento, repetições, recuperações e desaquecimento.':'A distância do plano corresponde à etapa principal; aquecimento e desaquecimento também somam carga.'].join('\n');}
 export function exportWorkoutFit(session,options={}){
  const recipe=workoutRecipe(session,options);
  const createdAt=options.createdAt||new Date();const created=Math.floor((createdAt.getTime()-FIT_EPOCH)/1000);
