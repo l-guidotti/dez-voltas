@@ -5,7 +5,7 @@ import {createServer} from 'node:http';
 import {spawn} from 'node:child_process';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join,resolve,extname} from 'node:path';
+import {join,resolve,extname,sep} from 'node:path';
 const root=resolve('dist'),temp=await mkdtemp(join(tmpdir(),'dez-draft-browser-'));
 let generationJob=null;
 let account={id:'browser-runner-a',email:'a@example.test'},cursor=0,syncs=0,posts=0;
@@ -41,7 +41,7 @@ const server=createServer(async(req,res)=>{
    posts++;res.statusCode=400;return res.end(JSON.stringify({error:'Unexpected API call'}));
   }
   if(path==='/index.html'){res.writeHead(308,{location:'/'});return res.end();}
-  const file=resolve(root,'.'+(path==='/'?'/index.html':path));if(!file.startsWith(root+'/'))throw Error('Invalid path');
+   const file=resolve(root,'.'+(path==='/'?'/index.html':path));if(!file.startsWith(root+sep))throw Error('Invalid path');
   const data=await readFile(file);res.setHeader('content-type',({'.js':'text/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'})[extname(file)]||'application/octet-stream');res.end(data);
  }catch{res.statusCode=404;res.end('Not found');}
 });
@@ -121,11 +121,15 @@ await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScale
  if(process.env.DV_RECOVERY_SCREENSHOT){await evaluate(`document.querySelector('#daily-recovery-region').scrollIntoView()`);const shot=await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(process.env.DV_RECOVERY_SCREENSHOT,Buffer.from(shot.data,'base64'));}
  await evaluate(`document.querySelector('#daily-checkin button[type="submit"]').click()`);await until(()=>evaluate(`document.querySelector('#daily-feedback')?.textContent.includes('sincronizados')`));
  assert.equal(dailyWrites,1);assert.equal([...dailyRows.values()][0].report.activity.type,'none');
- // Saving with focus still inside the form must reveal the saved record immediately.
- assert.equal(await evaluate(`document.querySelectorAll('.daily-history-entry').length`),1);
+ assert.equal(await evaluate(`document.querySelectorAll('.daily-history-entry').length`),0);
+ await evaluate(`location.hash='#diario'`);
+ await until(()=>evaluate(`document.querySelectorAll('#daily-recovery-history .daily-history-entry').length===1`));
+ assert.equal(await evaluate(`!!document.querySelector('#diary-workouts')&&!document.querySelector('#daily-checkin')`),true);
  assert.match(await evaluate(`document.querySelector('.daily-history-entry').textContent`),/Recuperação sem corrida/);
  await evaluate(`document.querySelector('.daily-history-entry').open=true;window.dispatchEvent(new Event('focus'))`);await pause(150);
  assert.equal(await evaluate(`document.querySelector('.daily-history-entry').open`),true,'Reading history survives background refresh');
+ await evaluate(`document.querySelector('[data-recovery="day"]').click()`);
+ await until(()=>evaluate(`location.hash==='#hoje'&&!!document.querySelector('#daily-checkin')`));
  // Explicit date changes must replace fields despite the input retaining focus.
  const originalDay=await evaluate(`document.querySelector('#daily-checkin [name="day"]').value`);
  const priorDay=new Date(Date.parse(originalDay+'T12:00:00Z')-86400000).toISOString().slice(0,10);
@@ -133,10 +137,13 @@ await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScale
  assert.equal(await evaluate(`document.querySelector('#daily-checkin [name="notes"]').value`),'');
  await fillDaily('fatigue','1');await fillDaily('sleep','5');await fillDaily('readiness','5');await fillDaily('pain','none');await fillDaily('notes','Ontem: descanso <seguro> & recuperação');
  await evaluate(`document.querySelector('#daily-checkin button[type="submit"]').click()`);await until(()=>evaluate(`document.querySelector('#daily-feedback')?.textContent.includes('sincronizados')`));
- assert.equal(await evaluate(`document.querySelectorAll('.daily-history-entry').length`),2);
+ assert.equal(await evaluate(`document.querySelectorAll('.daily-history-entry').length`),0);
+ await evaluate(`location.hash='#diario'`);
+ await until(()=>evaluate(`document.querySelectorAll('#daily-recovery-history .daily-history-entry').length===2`));
  assert.match(await evaluate(`document.querySelector('[data-record-day="${priorDay}"]').textContent`),/Ontem: descanso <seguro> & recuperação/);
  assert.equal(await evaluate(`document.querySelector('.daily-history-entry seguro')`),null,'Notes must remain escaped');
  await evaluate(`document.querySelector('[data-record-day="${originalDay}"] [data-recovery="day"]').click()`);
+ await until(()=>evaluate(`location.hash==='#hoje'&&!!document.querySelector('#daily-checkin')`));
  assert.equal(await evaluate(`document.querySelector('#daily-checkin [name="day"]').value`),originalDay);
  assert.equal(await evaluate(`document.querySelector('#daily-checkin [name="notes"]').value`),'Recuperação sem corrida');
 
@@ -159,8 +166,9 @@ await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScale
  assert.equal(await evaluate(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`),true,'Comparison must fit a mobile screen');
  assert.equal(await evaluate(`getComputedStyle(document.querySelector('.compare-after')).color`),'rgb(34, 95, 57)');
  assert.equal(await evaluate(`getComputedStyle(document.querySelector('.compare-before')).color`),'rgb(154, 48, 42)');
- await evaluate(`document.querySelector('.plan-compare-weeks summary').click()`);
- assert.equal(await evaluate(`document.querySelector('.plan-compare-weeks').open`),true);
+ assert.equal(await evaluate(`document.querySelector('.plan-compare-week').open`),true);
+ await evaluate(`document.querySelectorAll('.plan-compare-week summary')[1].click()`);
+ assert.equal(await evaluate(`document.querySelectorAll('.plan-compare-week')[1].open`),true);
  assert.equal(await evaluate(`document.querySelector('.plan-compare-week').textContent.includes('Aumento de 5 km')`),true);
  if(process.env.DV_COMPARISON_SCREENSHOT){const shot=await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(process.env.DV_COMPARISON_SCREENSHOT,Buffer.from(shot.data,'base64'));}
  // New partial edits on a completed account survive logout, remain private and resume after login.
