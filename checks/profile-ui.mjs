@@ -10,7 +10,7 @@ const context=vm.createContext({renderPushSettings:()=>'',disconnectPushForLogou
 vm.runInContext(fs.readFileSync('dist/profile.js','utf8').replace(/^import .*;\n/gm,'').replace(/export /g,''),context);
 let html=context.renderProfile();assert.ok(html.includes('Receber link de acesso'));assert.ok(!html.includes('id="profile-goal"'));assert.ok(html.includes('primeiro acesso'));
 vm.runInContext(`account={id:'uid-a',email:'<script>@example.com'}; authChecked=true;`,context);
-html=context.renderProfile();assert.ok(html.includes('name="consent"'));assert.ok(html.includes('Gerar sugestão com Gemini'));assert.equal((html.match(/name="days"/g)||[]).length,7);assert.ok(html.includes('name="recentQuality"'));assert.ok(html.includes('name="intensitySleep"'));assert.ok(html.includes('name="intensityRestriction"'));assert.ok(!html.includes('<script>'));assert.ok(html.includes('&lt;script&gt;@example.com'));
+html=context.renderProfile();assert.ok(html.includes('name="consent"'));assert.ok(html.includes('Gerar novo plano com Gemini'));assert.equal((html.match(/name="days"/g)||[]).length,7);assert.ok(html.includes('name="recentQuality"'));assert.ok(html.includes('name="intensitySleep"'));assert.ok(html.includes('name="intensityRestriction"'));assert.ok(!html.includes('<script>'));assert.ok(html.includes('&lt;script&gt;@example.com'));
 await context.initProfile();html=context.renderProfile();assert.ok(html.includes('Sem conexão.'));
 
 const fields={goal:'backyard',target:10,startDate:localToday(),targetDate:addDate(localToday(),170),weeklyKm:10,longestKm:8,weeksConsistent:2,maxMinutes:60,longMinutes:120,pain:'none',days:[0,2,3,5],consent:'on'};
@@ -27,7 +27,7 @@ fields.target=10;context.rememberDraft();
 context.fetch=async()=>Response.json({error:'O Gemini atingiu a cota disponível.'},{status:429});
 await events.submit({target:form,preventDefault(){}});
 html=context.renderProfile();
-assert.ok(html.indexOf('id="profile-generation-status"')>html.indexOf('Gerar sugestão com Gemini'));
+assert.ok(html.indexOf('id="profile-generation-status"')>html.indexOf('Gerar novo plano com Gemini'));
 assert.ok(html.includes('O Gemini atingiu a cota disponível.'));
 assert.ok(visited.includes('#profile-generation-status'));
 fields.consent=null;
@@ -49,8 +49,11 @@ context.fetch=async()=>{const e=new Error('aborted');e.name='AbortError';throw e
 await events.submit({target:form,preventDefault(){}});
 assert.ok(context.renderProfile().includes('mais de um minuto'));
 assert.ok(context.renderProfile().includes('Base gradual'));
+const originalSyncOwner=context.activeSyncOwner;
+context.activeSyncOwner=()=> 'uid-a';
 await events.click({target:{closest(){return {dataset:{profile:'adopt'}}}}});
 assert.equal(context.adopted.owner,'uid-a');assert.equal(context.location.hash,'#plano');
+context.activeSyncOwner=originalSyncOwner;
 vm.runInContext('account=null;',context);
 assert.ok(context.renderProfile().includes('Entrar com Google'));
 context.location.assign=url=>{context.assignedUrl=url};context.fetch=async path=>{assert.equal(path,'/api/auth/google');return Response.json({url:'https://auth.example.com/auth/v1/authorize?provider=google'})};
@@ -60,12 +63,12 @@ console.log('PASS: formulário, login, escape; envio autenticado, consentimento,
 
 // A new account must complete registration once; saving does not invoke Gemini.
 vm.runInContext("account={id:'new-runner',email:'new@example.com'};draft=null;result=null;busy=false;load();",context);
-assert.equal(context.needsRegistration(),true);html=context.renderProfile();assert.ok(html.includes('Concluir cadastro'));assert.ok(!html.includes('Gerar sugestão com Gemini'));assert.ok(!html.includes('name="consent"'));
+assert.equal(context.needsRegistration(),true);html=context.renderProfile();assert.ok(html.includes('Concluir cadastro'));assert.ok(!html.includes('Gerar novo plano com Gemini'));assert.ok(!html.includes('name="consent"'));
 fields.goal='distance';fields.target=10;fields.consent=null;fields.eventName='Prova local';fields.terrain='trail';fields.experience='returning';fields.recentRuns=2;fields.longDay=0;fields.finishMinutes=75;
 let generationRequests=0;context.fetch=async()=>{generationRequests++;throw Error('must not request Gemini')};
 await events.click({target:{closest(){return {dataset:{profile:'save-profile'}}}}});
 assert.equal(generationRequests,0);assert.equal(context.needsRegistration(),false);const registered=JSON.parse(storage.get('dez-voltas-draft-v1:new-runner'));assert.equal(registered.details.registrationCompleted,true);assert.equal(registered.details.terrain,'trail');assert.equal(registered.consent,false);
-vm.runInContext('load();',context);assert.equal(context.needsRegistration(),false);assert.ok(context.renderProfile().includes('Gerar sugestão com Gemini'));
+vm.runInContext('load();',context);assert.equal(context.needsRegistration(),false);assert.ok(context.renderProfile().includes('Gerar novo plano com Gemini'));
 await events.submit({target:form,preventDefault(){}});assert.equal(generationRequests,0);assert.ok(context.renderProfile().includes('Autorize o envio'));
 console.log('PASS: cadastro obrigatório na primeira entrada, perfil salvo sem Gemini/consentimento, conclusão persistida e geração com autorização separada.');
 
@@ -134,14 +137,14 @@ console.log('PASS: cadastro incompleto preservado durante sincronização, recar
 // Terminal errors are also shown beside the generate button, not just above the long form.
 context.fetch=async()=>Response.json({job:{id:'failed-test',status:'failed',attempts:1,error:'Formato rejeitado pelo provedor.'},history:[]});
 await context.refreshJobs(true);html=context.renderProfile();
-assert.ok(html.lastIndexOf('Formato rejeitado pelo provedor.')>html.indexOf('Gerar sugestão com Gemini'));
+assert.ok(html.lastIndexOf('Formato rejeitado pelo provedor.')>html.indexOf('Gerar novo plano com Gemini'));
 console.log('PASS: falha da fila aparece também junto ao botão de geração.');
 
 // Weekly proposals render their deterministic comparison before the adoption button.
 const comparisonSource={id:'ai-source',owner:'partial-a',active:true,profile:p,plan,generatedAt:'2026-01-01T00:00:00Z'};
 context.exportPlanArchive=()=>({owner:'partial-a',plans:[comparisonSource]});context.getActivePlan=()=>comparisonSource;
 const reviewed={profile:{...p,startDate:addDate(p.startDate,7),review:{sourcePlanId:'ai-source',weekStart:p.startDate,weekEnd:addDate(p.startDate,6),reason:'Rever carga'}},plan:{...plan,weeks:plan.weeks.map(w=>({...w,start:addDate(w.start,7),sessions:w.sessions.map(s=>({...s,date:addDate(s.date,7)}))}))},generatedAt:new Date().toISOString(),model:'test'};
-html=context.renderResult(reviewed);assert.ok(html.includes('O que muda no seu plano?'));
-assert.ok(html.indexOf('O que muda no seu plano?')<html.indexOf('data-profile="adopt"'));
+html=context.renderResult(reviewed,true);assert.ok(html.includes('O que muda no seu plano?'));
+assert.ok(html.indexOf('O que muda no seu plano?')<html.indexOf('data-weekly="adopt"'));
 assert.ok(html.includes('21 dias comparáveis'));assert.ok(html.includes('7 de 28 dias'));
 console.log('PASS: comparação semanal integrada à sugestão, antes da decisão de adotar.');

@@ -6,13 +6,18 @@ const events={},windowEvents={};let active={id:'ai-weekly-1',owner:'owner-a',pro
 const state={planId:active.id,profile:active.profile,weekStart:'2026-10-16',weekEnd:'2026-10-22',canSave:true,checkin:null,stats:{registered:3,km:15,minutes:105},planned:3,history:[]};
 let fields={fatigue:'2',sleep:'4',readiness:'4',pain:'none',illness:null,complete:'on',consent:null,days:['0','2','4'],maxMinutes:'60',longMinutes:'90',notes:'<script>alert(1)</script>'};
 const context=vm.createContext({crypto:{randomUUID:()=> '20000000-0000-4000-8000-000000000001'},synchronizeRecovery:async()=>{},dailyRecoveryReady:()=>true,console,validateWeeklyCheckin,sessionFetch:async(path,options)=>{if(options.method==='POST'){const body=JSON.parse(options.body);posts.push(body);return Response.json({checkin:{id:'checkin-1',revision:1,report:body.report}});}return Response.json(state);},getActivePlan:()=>active,activeSyncOwner:()=>active?.owner||null,synchronize:async()=>{},hasSyncConflict:()=>conflict,accountSyncReady:()=>ready,AbortSignal,Event,FormData:class{get(k){return fields[k]}getAll(k){return fields[k]||[]}},document:{addEventListener:(name,fn)=>events[name]=fn},window:{addEventListener:(name,fn)=>windowEvents[name]=fn,dispatchEvent(){}},location:{hash:'#plano'}});
+Object.assign(context,{clearTimeout(){},localToday:()=> '2026-10-22',checkedSuggestion:result=>result,renderResult:(result,weekly)=>weekly?'<article>'+result.plan.summary+'</article>':'',applyPlanSuggestion:()=>{throw Error('A proposta só pode ser aplicada por uma ação do usuário.');}});
 vm.runInContext(fs.readFileSync('dist/weekly-review.js','utf8').replace(/^import .*;\n/gm,'').replace(/export /g,''),context);
 await context.refreshWeeklyReview();let html=context.renderWeeklyReview();assert.match(html,/15 km e 105 min/);assert.match(html,/Autorizo enviar/);assert.match(html,/fadiga|Fadiga/);
+assert.match(context.renderWeeklyHomeNotice(),/É hora de fechar sua semana/);
 const submit=()=>events.submit({target:{id:'weekly-checkin'},preventDefault(){}});
 ready=false;await submit();assert.equal(posts.length,0);assert.match(context.renderWeeklyReview(),/sincronização terminar/);
 ready=true;conflict=true;await submit();assert.equal(posts.length,0);conflict=false;
 await submit();assert.equal(posts.length,1);assert.equal(posts[0].report.consent,false);assert.match(context.renderWeeklyReview(),/salvo sem envio ao Gemini/);assert.ok(!context.renderWeeklyReview().includes('<script>'));
-fields.consent='on';await submit();assert.equal(posts[1].report.consent,true);assert.match(context.renderWeeklyReview(),/entra na fila automaticamente/);
+fields.consent='on';await submit();assert.equal(posts[1].report.consent,true);assert.match(context.renderWeeklyReview(),/entra na fila depois da meia-noite/);
+assert.match(context.renderWeeklyHomeNotice(),/Fechamento semanal salvo/);
+context.localToday=()=> '2026-10-23';
+assert.match(context.renderWeeklyHomeNotice(),/revisão semanal está em andamento/);
 state.checkin={id:'checkin-1',job_id:'job-1',revision:2,report:posts[1].report};await context.refreshWeeklyReview();assert.match(context.renderWeeklyReview(),/Fechamento enviado/);const before=posts.length;await submit();assert.equal(posts.length,before);
 for(const [status,text] of [['failed',/não foi concluída/],['completed',/revisão está pronta/],['processing',/revisando seus registros/],['retrying',/nova tentativa automática/]]){
  state.reviewJob={status,error:'Falha <script>alert(1)</script>'};await context.refreshWeeklyReview();const markup=context.renderWeeklyReview();assert.match(markup,text);assert.ok(!markup.includes('<script>'));
@@ -33,6 +38,18 @@ await retry();assert.equal(retries.length,1);assert.match(context.renderWeeklyRe
 await Promise.all([retry(),retry()]);assert.equal(retries.length,2);assert.equal(retries[0].requestId,retries[1].requestId,'A lost response must reuse its idempotency key');
 await retry();assert.equal(retries.length,2,'Pending generation cannot be submitted again');
 assert.match(context.renderWeeklyReview(),/Nova revisão solicitada/);
+context.location.hash='#hoje';
+state.reviewJob={status:'completed'};
+context.sessionFetch=async path=>{
+ if(path==='/api/training/weekly-review')return Response.json(state);
+ assert.equal(path,'/api/training/jobs?id=new-job');
+ return Response.json({job:{id:'new-job',kind:'weekly_review',status:'completed',result:{profile:{review:{sourcePlanId:active.id}},plan:{summary:'Treinos ajustados para a próxima semana.'}}}});
+};
+await context.refreshWeeklyReview();
+await new Promise(resolve=>setImmediate(resolve));
+assert.match(context.renderWeeklyHomeNotice(),/Sua sugestão da semana está pronta/);
+assert.match(context.renderWeeklyHomeNotice(),/Treinos ajustados para a próxima semana/);
+assert.match(context.renderWeeklyReview(),/Treinos ajustados para a próxima semana/);
 // An account switch cannot accept a late result for the old account.
-let release;context.sessionFetch=()=>new Promise(resolve=>release=resolve);const pending=context.refreshWeeklyReview();active=null;await context.refreshWeeklyReview();release(Response.json(state));await pending;assert.equal(context.renderWeeklyReview(),'');
+let release;context.sessionFetch=()=>new Promise(resolve=>release=resolve);const pending=context.refreshWeeklyReview();active=null;await context.refreshWeeklyReview();release(Response.json(state));await pending;assert.equal(context.renderWeeklyHomeNotice(),'');assert.match(context.renderWeeklyReview(),/Ative um plano/);
 console.log('PASS: fechamento semanal, autorização separada, bloqueio offline/conflito, escape, envio único, estado congelado e conta trocada durante consulta (DOM simulado).');
